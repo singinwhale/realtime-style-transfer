@@ -1,0 +1,7 @@
+
+# transient data
+/data
+/logs
+
+# python transient files
+__pycache__
