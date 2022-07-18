@@ -9,9 +9,7 @@ import os
 import tensorflow as tf
 
 # Load compressed models from tensorflow_hub
-from models.styleLoss import StyleLossModel
-
-os.environ['TFHUB_MODEL_LOAD_FORMAT'] = 'COMPRESSED'
+from models.styleLoss import StyleLossModelVGG, StyleLossModelEfficientNet
 
 import IPython.display as display
 
@@ -41,51 +39,14 @@ imshow(content_image, 'Content Image')
 plt.subplot(1, 2, 2)
 imshow(style_image, 'Style Image')
 
-"""## Fast Style Transfer using TF-Hub
-
-This tutorial demonstrates the original style-transfer algorithm, which optimizes the image content to a particular style. Before getting into the details, let's see how the [TensorFlow Hub model](https://tfhub.dev/google/magenta/arbitrary-image-stylization-v1-256/2) does this:
-"""
-
-import tensorflow_hub as hub
-
-hub_model = hub.load('https://tfhub.dev/google/magenta/arbitrary-image-stylization-v1-256/2')
-stylized_image = hub_model(tf.constant(content_image), tf.constant(style_image))[0]
-tensor_to_image(stylized_image)
-
-"""## Define content and style representations
-
-Use the intermediate layers of the model to get the *content* and *style* representations of the image. Starting from the network's input layer, the first few layer activations represent low-level features like edges and textures. As you step through the network, the final few layers represent higher-level features—object parts like *wheels* or *eyes*. In this case, you are using the VGG19 network architecture, a pretrained image classification network. These intermediate layers are necessary to define the representation of content and style from the images. For an input image, try to match the corresponding style and content target representations at these intermediate layers.
-
-Load a [VGG19](https://keras.io/api/applications/vgg/#vgg19-function) and test run it on our image to ensure it's used correctly:
-"""
-
-x = tf.keras.applications.vgg19.preprocess_input(content_image * 255)
-x = tf.image.resize(x, (224, 224))
-vgg = tf.keras.applications.VGG19(include_top=True, weights='imagenet')
-prediction_probabilities = vgg(x)
-prediction_probabilities.shape
-
-predicted_top_5 = tf.keras.applications.vgg19.decode_predictions(prediction_probabilities.numpy())[0]
-[(class_name, prob) for (number, class_name, prob) in predicted_top_5]
-
-"""Now load a `VGG19` without the classification head, and list the layer names"""
-
-vgg = tf.keras.applications.VGG19(include_top=False, weights='imagenet')
-
-print()
-for layer in vgg.layers:
-    print(layer.name)
 
 """Choose intermediate layers from the network to represent the style and content of the image:
 
 """
 
-content_layers = ['block5_conv2']
-
-style_layers = ['block1_conv1', 'block2_conv1', 'block3_conv1', 'block4_conv1', 'block5_conv1']
-
-
-extractor = StyleLossModel(style_layers, content_layers)
+# extractor = StyleLossModelVGG()
+extractor = StyleLossModelEfficientNet()
+num_style_layers = extractor.num_style_layers
 
 results = extractor(tf.constant(content_image))
 
@@ -135,20 +96,24 @@ opt = tf.keras.optimizers.Adam(learning_rate=0.02, beta_1=0.99, epsilon=1e-1)
 
 """To optimize this, use a weighted combination of the two losses to get the total loss:"""
 
-style_weight = 1e-2
-content_weight = 1e4
+style_weight = 1e4
+content_weight = 1e-2
 
 
 def style_content_loss(outputs):
     style_outputs = outputs['style']
     content_outputs = outputs['content']
-    style_loss = tf.add_n(
-        [tf.reduce_mean((style_outputs[name] - style_targets[name]) ** 2) for name in style_outputs.keys()])
-    style_loss *= style_weight / len(style_layers)
+    per_layer_style_losses = [tf.reduce_mean((style_outputs[name] - style_targets[name]) ** 2) for name in
+                              style_outputs.keys()]
 
-    content_loss = tf.add_n(
-        [tf.reduce_mean((content_outputs[name] - content_targets[name]) ** 2) for name in content_outputs.keys()])
-    content_loss *= content_weight / len(style_layers)
+    style_loss = tf.add_n(per_layer_style_losses)
+    style_loss *= style_weight / num_style_layers
+
+    per_layer_content_losses = [tf.reduce_mean((content_outputs[name] - content_targets[name]) ** 2) for name in
+                                content_outputs.keys()]
+
+    content_loss = tf.add_n(per_layer_content_losses)
+    content_loss *= content_weight / num_style_layers
     loss = style_loss + content_loss
     return loss
 
@@ -190,7 +155,7 @@ def train_step(image):
 
 
 """And run the optimization:"""
-
+filename_template = 'logs/test/stylized-image_{:03}.png'
 import time
 
 start = time.time()
@@ -204,8 +169,9 @@ for n in range(epochs):
         step += 1
         train_step(image)
         print(".", end='', flush=True)
-    display.clear_output(wait=True)
-    display.display(tensor_to_image(image))
+    #display.clear_output(wait=True)
+    #display.display(tensor_to_image(image))
+    tensor_to_image(image).save(filename_template.format(step))
     print("Train step: {}".format(step))
 
 end = time.time()
@@ -213,5 +179,6 @@ print("Total time: {:.1f}".format(end - start))
 
 """Finally, save the result:"""
 
-file_name = 'stylized-image.png'
+
+file_name = filename_template.format(999)
 tensor_to_image(image).save(file_name)

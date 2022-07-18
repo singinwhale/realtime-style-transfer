@@ -43,7 +43,9 @@ def gram_matrix(input_tensor):
 
     The content of an image is represented by the values of the intermediate feature maps.
 
-    It turns out, the style of an image can be described by the means and correlations across the different feature maps. Calculate a Gram matrix that includes this information by taking the outer product of the feature vector with itself at each location, and averaging that outer product over all locations. This Gram matrix can be calculated for a particular layer as:
+    It turns out, the style of an image can be described by the means and correlations across the different feature maps.
+    Calculate a Gram matrix that includes this information by taking the outer product of the feature vector with itself at each location,
+    and averaging that outer product over all locations. This Gram matrix can be calculated for a particular layer as:
 
     $$G^l_{cd} = \frac{\sum_{ij} F^l_{ijc}(x)F^l_{ijd}(x)}{IJ}$$
 
@@ -55,14 +57,18 @@ def gram_matrix(input_tensor):
     return result / (num_locations)
 
 
-class StyleLossModel(tf.keras.models.Model):
+class StyleLossModelVGG(tf.keras.models.Model):
     """## Extract style and content
     When called on an image, this model returns the gram matrix (style) of the `style_layers` and content of the `content_layers`
     Build a model that returns the style and content tensors.
     """
 
-    def __init__(self, style_layers, content_layers):
-        super(StyleLossModel, self).__init__()
+    def __init__(self):
+        super(StyleLossModelVGG, self).__init__()
+
+        content_layers = ['block5_conv2']
+        style_layers = ['block1_conv1', 'block2_conv1', 'block3_conv1', 'block4_conv1', 'block5_conv1']
+
         self.vgg = vgg_layers(style_layers + content_layers)
         self.style_layers = style_layers
         self.content_layers = content_layers
@@ -74,6 +80,52 @@ class StyleLossModel(tf.keras.models.Model):
         inputs = inputs * 255.0
         preprocessed_input = tf.keras.applications.vgg19.preprocess_input(inputs)
         outputs = self.vgg(preprocessed_input)
+        style_outputs, content_outputs = (outputs[:self.num_style_layers], outputs[self.num_style_layers:])
+
+        style_outputs = [gram_matrix(style_output) for style_output in style_outputs]
+
+        content_dict = {content_name: value for content_name, value in zip(self.content_layers, content_outputs)}
+
+        style_dict = {style_name: value for style_name, value in zip(self.style_layers, style_outputs)}
+
+        return {'content': content_dict, 'style': style_dict}
+
+
+class StyleLossModelEfficientNet(tf.keras.models.Model):
+    """## Extract style and content
+    When called on an image, this model returns the gram matrix (style) of the `style_layers` and content of the `content_layers`
+    Build a model that returns the style and content tensors.
+    """
+
+    def __init__(self):
+        super(StyleLossModelEfficientNet, self).__init__()
+
+        style_layer_names = ['block2c_add',
+                             'block3c_add',
+                             'block4e_add',
+                             ]
+        content_layer_names = ['block6f_add',
+                               'block7b_add',
+                               'block5e_add']
+        output_layer_names = style_layer_names + content_layer_names
+
+        # Load our model. Load pretrained VGG, trained on ImageNet data
+        efficientnet = tf.keras.applications.efficientnet.EfficientNetB3(include_top=False)
+        efficientnet.trainable = False
+
+        outputs = [efficientnet.get_layer(name).output for name in output_layer_names]
+
+        self.efficientNet = tf.keras.Model([efficientnet.input], outputs)
+        self.style_layers = style_layer_names
+        self.content_layers = content_layer_names
+        self.num_style_layers = len(style_layer_names)
+        self.efficientNet.trainable = False
+
+    def call(self, inputs):
+        "Expects float input in [0,1]"
+        inputs = inputs * 255.0
+
+        outputs = self.efficientNet(inputs)
         style_outputs, content_outputs = (outputs[:self.num_style_layers], outputs[self.num_style_layers:])
 
         style_outputs = [gram_matrix(style_output) for style_output in style_outputs]
