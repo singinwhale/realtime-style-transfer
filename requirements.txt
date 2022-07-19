@@ -5,3 +5,5 @@ numpy >= 1.20
 tqdm==4.*
 matplotlib==3.5.*
 pillow
+kaggle
+httpx
