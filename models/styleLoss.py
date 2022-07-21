@@ -1,3 +1,4 @@
+import keras
 import tensorflow as tf
 
 
@@ -119,20 +120,24 @@ class StyleLossModelEfficientNet(tf.keras.models.Model):
     Build a model that returns the style and content tensors.
     """
 
-    def __init__(self):
-        super(StyleLossModelEfficientNet, self).__init__()
+    def __init__(self, input_shape, name="StyleLossModelEfficientNet"):
+        super(StyleLossModelEfficientNet, self).__init__(name=name)
 
-        style_layer_names = ['block2c_add',
-                             'block3c_add',
-                             'block4e_add',
-                             ]
-        content_layer_names = ['block6f_add',
-                               'block7b_add',
-                               'block5e_add']
+        style_layer_names = [
+            'block2c_add',
+            'block3c_add',
+            'block4e_add',
+        ]
+        content_layer_names = [
+            'block5e_add',
+            'block6f_add',
+            'block7b_add',
+        ]
         output_layer_names = style_layer_names + content_layer_names
 
         # Load our model. Load pretrained VGG, trained on ImageNet data
-        efficientnet = tf.keras.applications.efficientnet.EfficientNetB3(include_top=False)
+        efficientnet = tf.keras.applications.efficientnet.EfficientNetB3(include_top=False,
+                                                                         input_shape=input_shape[-3:])
         efficientnet.trainable = False
 
         outputs = [efficientnet.get_layer(name).output for name in output_layer_names]
@@ -142,6 +147,7 @@ class StyleLossModelEfficientNet(tf.keras.models.Model):
         self.content_layers = content_layer_names
         self.num_style_layers = len(style_layer_names)
         self.efficientNet.trainable = False
+        self.trainable = False
 
     def call(self, inputs):
         "Expects float input in [0,1]"
@@ -157,3 +163,7 @@ class StyleLossModelEfficientNet(tf.keras.models.Model):
         style_dict = {style_name: value for style_name, value in zip(self.style_layers, style_outputs)}
 
         return {'content': content_dict, 'style': style_dict}
+
+
+def style_loss(loss_model: keras.Model, inputs: tf.Tensor, outputs: tf.Tensor):
+    pass

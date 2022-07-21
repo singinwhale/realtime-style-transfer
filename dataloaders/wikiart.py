@@ -136,7 +136,7 @@ def download_images():
 import tensorflow as tf
 
 
-def get_dataset() -> (tf.data.Dataset, tf.data.Dataset):
+def get_dataset(image_size: typing.Tuple[int, int]) -> (tf.data.Dataset, tf.data.Dataset):
     log.info("Loading WikiArt dataset...")
     if not test_complete():
         if not test_manifest_exists():
@@ -146,11 +146,9 @@ def get_dataset() -> (tf.data.Dataset, tf.data.Dataset):
 
     args = {
         'seed': 219793472,
-        'image_size': (1920, 1080),
+        'image_size': image_size,
         'validation_split': 0.2
     }
     training_dataset = tf.keras.utils.image_dataset_from_directory(image_dir.parent, subset="training", **args)
     validation_dataset = tf.keras.utils.image_dataset_from_directory(image_dir.parent, subset="validation", **args)
-    training_dataset.cache()
-    validation_dataset.cache()
     return (training_dataset, validation_dataset)

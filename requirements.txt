@@ -7,3 +7,4 @@ matplotlib==3.5.*
 pillow
 kaggle
 httpx
+pydot==1.4.*
