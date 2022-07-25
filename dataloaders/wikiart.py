@@ -1,14 +1,16 @@
+import shutil
 import typing
 from pathlib import Path
 
-import logging
+import logsetup
 
 import tqdm.asyncio
-
-log = logging.getLogger()
+import logging
+log = logging.getLogger(__name__)
 
 target_dir = Path(__file__).parent.parent.absolute() / "data" / "wikiart"
 image_dir = target_dir / 'images' / 'painting'
+debug_image_dir = target_dir / 'debug_images' / 'painting'
 manifest_filepath = target_dir / 'wikiart_scraped.csv'
 
 
@@ -16,8 +18,14 @@ def test_manifest_exists():
     return manifest_filepath.exists()
 
 
-def test_images_exist():
-    return len(list(image_dir.glob("*.jpg"))) == 124110
+def test_images_exist(thorough=False):
+    if not thorough:
+        return (image_dir / "a6ab05c7e9f6e8810d3567c699f620b07600ae19.jpg").exists()
+    import time
+    start = time.time_ns()
+    filecount = len(list(image_dir.iterdir()))
+    log.info(f"took {(time.time_ns() - start) * 1e-6}ms to count {filecount} images")
+    return filecount == 124110
 
 
 def test_complete():
@@ -66,7 +74,7 @@ async def download_images_async(progress_hook: typing.Callable[[str, Path, int, 
     if not image_dir.exists():
         import os
         log.info(f"Creating imagedir at {image_dir}")
-        os.mkdir(image_dir)
+        image_dir.mkdir(parents=True)
 
     class AsyncState:
         total = 0
@@ -138,12 +146,12 @@ import tensorflow as tf
 
 def get_dataset(image_size: typing.Tuple[int, int]) -> (tf.data.Dataset, tf.data.Dataset):
     log.info("Loading WikiArt dataset...")
-    if not test_complete():
-        if not test_manifest_exists():
-            download_manifest()
-        if not test_images_exist():
-            download_images()
+    init_dataset()
 
+    return load_dataset_from_path(image_dir, image_size)
+
+
+def load_dataset_from_path(image_dir, image_size):
     args = {
         'seed': 219793472,
         'image_size': image_size,
@@ -151,4 +159,28 @@ def get_dataset(image_size: typing.Tuple[int, int]) -> (tf.data.Dataset, tf.data
     }
     training_dataset = tf.keras.utils.image_dataset_from_directory(image_dir.parent, subset="training", **args)
     validation_dataset = tf.keras.utils.image_dataset_from_directory(image_dir.parent, subset="validation", **args)
-    return (training_dataset, validation_dataset)
+    return training_dataset, validation_dataset
+
+
+def init_dataset():
+    if not test_complete():
+        if not test_manifest_exists():
+            download_manifest()
+        if not test_images_exist():
+            download_images()
+
+
+def get_dataset_debug(image_size: typing.Tuple[int, int]) -> (tf.data.Dataset, tf.data.Dataset):
+    log.info("Loading Debug WikiArt dataset...")
+    init_dataset()
+    if not debug_image_dir.exists():
+        log.info(f"{debug_image_dir} does not exist. Creating it.")
+        debug_image_dir.mkdir(parents=True)
+    if len(list(debug_image_dir.iterdir())) != 100:
+        log.info(f"Copying debug images to {debug_image_dir}")
+        images = image_dir.iterdir()
+        for i in range(100):
+            image = next(images)
+            shutil.copyfile(image, debug_image_dir / image.name)
+
+    return load_dataset_from_path(debug_image_dir, image_size)
