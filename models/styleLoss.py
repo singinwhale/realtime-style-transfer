@@ -166,4 +166,15 @@ class StyleLossModelEfficientNet(tf.keras.models.Model):
 
 
 def style_loss(loss_model: keras.Model, inputs: tf.Tensor, outputs: tf.Tensor):
-    pass
+    # perform feature extraction on the input content image and diff it against the output features
+    input_content = inputs[:, 0]
+    input_style = inputs[:, 1]
+    input_feature_values: tf.Tensor = loss_model(input_content)
+    output_feature_values: tf.Tensor = loss_model(outputs)
+    feature_loss = tf.nn.l2_loss(output_feature_values - input_feature_values)
+
+    input_style_gram_value = gram_matrix(input_style)
+    output_gram_value = gram_matrix(outputs)
+    gram_loss = tf.nn.l2_loss(output_gram_value - input_style_gram_value)
+
+    return feature_loss + gram_loss
