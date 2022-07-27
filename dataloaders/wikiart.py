@@ -200,10 +200,11 @@ def get_dataset_debug(shapes) -> (tf.data.Dataset, tf.data.Dataset):
     if not debug_image_dir.exists():
         log.info(f"{debug_image_dir} does not exist. Creating it.")
         debug_image_dir.mkdir(parents=True)
-    if len(list(debug_image_dir.iterdir())) != 100:
+    num_images = 100
+    if len(list(debug_image_dir.iterdir())) != num_images:
         log.info(f"Copying debug images to {debug_image_dir}")
         images = image_dir.iterdir()
-        for i in range(100):
+        for i in range(num_images):
             image = next(images)
             shutil.copyfile(image, debug_image_dir / image.name)
 

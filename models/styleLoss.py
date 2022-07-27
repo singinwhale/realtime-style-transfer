@@ -1,6 +1,8 @@
 from tensorflow import keras
 import tensorflow as tf
 
+import logging
+log = logging.getLogger(__name__)
 
 def vgg_layers(layer_names):
     """#### Intermediate layers for style and content
@@ -80,29 +82,15 @@ def style_content_loss(outputs, num_style_layers, style_targets, content_targets
     return loss
 
 
-class StyleLossModelVGG(tf.keras.models.Model):
-    """## Extract style and content
-    When called on an image, this model returns the gram matrix (style) of the `style_layers` and content of the `content_layers`
-    Build a model that returns the style and content tensors.
-    """
+class StyleLossModelBase(tf.keras.models.Model):
+    num_style_layers: int = None
 
-    def __init__(self):
-        super(StyleLossModelVGG, self).__init__()
-
-        content_layers = ['block5_conv2']
-        style_layers = ['block1_conv1', 'block2_conv1', 'block3_conv1', 'block4_conv1', 'block5_conv1']
-
-        self.vgg = vgg_layers(style_layers + content_layers)
-        self.style_layers = style_layers
-        self.content_layers = content_layers
-        self.num_style_layers = len(style_layers)
-        self.vgg.trainable = False
+    def __init__(self, *args, **kwargs):
+        super(StyleLossModelBase, self).__init__(*args, **kwargs)
+        self.trainable = False
 
     def call(self, inputs):
-        "Expects float input in [0,1]"
-        inputs = inputs * 255.0
-        preprocessed_input = tf.keras.applications.vgg19.preprocess_input(inputs)
-        outputs = self.vgg(preprocessed_input)
+        outputs = self.feature_extractor(inputs)
         style_outputs, content_outputs = (outputs[:self.num_style_layers], outputs[self.num_style_layers:])
 
         style_outputs = [gram_matrix(style_output) for style_output in style_outputs]
@@ -111,10 +99,36 @@ class StyleLossModelVGG(tf.keras.models.Model):
 
         style_dict = {style_name: value for style_name, value in zip(self.style_layers, style_outputs)}
 
-        return {'content': content_dict, 'style': style_dict}
+        return {'content': content_outputs, 'style': style_outputs}
 
 
-class StyleLossModelEfficientNet(tf.keras.models.Model):
+class StyleLossModelVGG(StyleLossModelBase):
+    """## Extract style and content
+    When called on an image, this model returns the gram matrix (style) of the `style_layers` and content of the `content_layers`
+    Build a model that returns the style and content tensors.
+    """
+
+    def __init__(self):
+        super(StyleLossModelVGG, self).__init__(name='StyleLossModelVGG')
+
+        content_layers = ['block5_conv2']
+        style_layers = ['block1_conv1', 'block2_conv1', 'block3_conv1', 'block4_conv1', 'block5_conv1']
+
+        self.vgg = vgg_layers(style_layers + content_layers)
+        self.vgg.trainable = False
+
+        self.style_layers = style_layers
+        self.content_layers = content_layers
+        self.num_style_layers = len(style_layers)
+
+    def call(self, inputs):
+        "Expects float input in [0,1]"
+        inputs = inputs * 255.0
+        preprocessed_input = tf.keras.applications.vgg19.preprocess_input(inputs)
+        return super(StyleLossModelVGG, self).call(preprocessed_input)
+
+
+class StyleLossModelEfficientNet(StyleLossModelBase):
     """## Extract style and content
     When called on an image, this model returns the gram matrix (style) of the `style_layers` and content of the `content_layers`
     Build a model that returns the style and content tensors.
@@ -142,27 +156,53 @@ class StyleLossModelEfficientNet(tf.keras.models.Model):
 
         outputs = [efficientnet.get_layer(name).output for name in output_layer_names]
 
-        self.efficientNet = tf.keras.Model([efficientnet.input], outputs)
+        self.feature_extractor = tf.keras.Model([efficientnet.input], outputs)
+        self.feature_extractor.trainable = False
+
         self.style_layers = style_layer_names
         self.content_layers = content_layer_names
         self.num_style_layers = len(style_layer_names)
-        self.efficientNet.trainable = False
-        self.trainable = False
 
     def call(self, inputs):
-        "Expects float input in [0,1]"
+        """Expects float input in [0,1]"""
         inputs = inputs * 255.0
+        return super(StyleLossModelEfficientNet, self).call(inputs)
 
-        outputs = self.efficientNet(inputs)
-        style_outputs, content_outputs = (outputs[:self.num_style_layers], outputs[self.num_style_layers:])
 
-        style_outputs = [gram_matrix(style_output) for style_output in style_outputs]
+class StyleLossModelMobileNet(StyleLossModelBase):
 
-        content_dict = {content_name: value for content_name, value in zip(self.content_layers, content_outputs)}
+    def __init__(self, input_shape, name="StyleLossModelMobileNet"):
+        super(StyleLossModelMobileNet, self).__init__(name=name)
 
-        style_dict = {style_name: value for style_name, value in zip(self.style_layers, style_outputs)}
+        style_layer_names = [
+            'expanded_conv_2/Add',
+            'expanded_conv_4/Add',
+            'expanded_conv_5/Add',
+        ]
+        content_layer_names = [
+            'expanded_conv_7/Add',
+            'expanded_conv_9/Add',
+            'expanded_conv_10/Add',
+        ]
+        output_layer_names = style_layer_names + content_layer_names
 
-        return {'content': content_outputs, 'style': style_outputs}
+        # Load our model. Load pretrained VGG, trained on ImageNet data
+        mobile_net = tf.keras.applications.MobileNetV3Small(include_top=False, input_shape=input_shape[-3:])
+        mobile_net.trainable = False
+
+        outputs = [mobile_net.get_layer(name).output for name in output_layer_names]
+
+        self.feature_extractor = tf.keras.Model([mobile_net.input], outputs)
+        self.feature_extractor.trainable = False
+
+        self.style_layers = style_layer_names
+        self.content_layers = content_layer_names
+        self.num_style_layers = len(style_layer_names)
+
+    def call(self, inputs):
+        """Expects float input in [0,1]"""
+        inputs = inputs * 255.0
+        return super(StyleLossModelMobileNet, self).call(inputs)
 
 
 def style_loss(loss_model: keras.Model, x: tf.Tensor, y_pred: tf.Tensor):

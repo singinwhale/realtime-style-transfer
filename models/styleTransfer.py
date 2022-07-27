@@ -7,25 +7,14 @@ import logging
 log = logging.getLogger(__name__)
 
 
-class InstanceNormalization(tf.keras.layers.Layer):
+class ConditionalInstanceNormalization(tf.keras.layers.Layer):
     """Instance Normalization Layer (https://arxiv.org/abs/1607.08022)."""
 
     def __init__(self, epsilon=1e-5):
-        super(InstanceNormalization, self).__init__()
+        super(ConditionalInstanceNormalization, self).__init__()
         self.epsilon = epsilon
-
-    def build(self, input_shape):
-        self.scale = self.add_weight(
-            name='scale',
-            shape=input_shape[-1:],
-            initializer=tf.random_normal_initializer(1., 0.02),
-            trainable=True)
-
-        self.offset = self.add_weight(
-            name='offset',
-            shape=input_shape[-1:],
-            initializer='zeros',
-            trainable=True)
+        self.scale = 1
+        self.offset = 0
 
     def call(self, x):
         mean, variance = tf.nn.moments(x, axes=[1, 2], keepdims=True)
@@ -34,7 +23,7 @@ class InstanceNormalization(tf.keras.layers.Layer):
         return self.scale * normalized + self.offset
 
 
-def upsample(filters, size, name, norm_type='batchnorm', apply_dropout=False) -> tf.keras.Sequential:
+def upsample(filters, size, name, apply_dropout=False) -> tf.keras.Sequential:
     """Upsamples an input.
     Conv2DTranspose => Batchnorm => Dropout => Relu
     Args:
@@ -56,10 +45,7 @@ def upsample(filters, size, name, norm_type='batchnorm', apply_dropout=False) ->
                                         kernel_initializer=initializer,
                                         use_bias=False, name=f"{name}_conv"))
 
-    if norm_type.lower() == 'batchnorm':
-        result.add(tf.keras.layers.BatchNormalization(name=f"{name}_BN"))
-    elif norm_type.lower() == 'instancenorm':
-        result.add(InstanceNormalization())
+    result.add(ConditionalInstanceNormalization())
 
     if apply_dropout:
         result.add(tf.keras.layers.Dropout(0.5))
@@ -68,15 +54,15 @@ def upsample(filters, size, name, norm_type='batchnorm', apply_dropout=False) ->
 
     return result
 
+
 class StyleTransferModel(tf.keras.Model):
 
     def __init__(self, input_shape,
                  style_predictor_factory_func: typing.Callable[[typing.List[tf.keras.layers.Layer]], tf.keras.Model],
                  style_loss_func: typing.Callable,
-                 norm_type='batchnorm', name="StyleTransferModel"):
+                 name="StyleTransferModel"):
         """Modified u-net generator model (https://arxiv.org/abs/1611.07004).
         Args:
-          norm_type: Type of normalization. Either 'batchnorm' or 'instancenorm'.
           style_predictor_factory_func: function taking a list of batch norm layers from the style transfer model and
             produces a style prediction network
         Returns:
@@ -101,34 +87,33 @@ class StyleTransferModel(tf.keras.Model):
 
         self.encoder = tf.keras.Model(inputs=encoder_model.input, outputs=encoder_model_layers)
         self.decoder_layers = [
-            upsample(512, 4, name="0", norm_type=norm_type),  # (bs, 16, 16, 1024)
-            upsample(256, 4, name="1", norm_type=norm_type),  # (bs, 32, 32, 512)
-            upsample(128, 4, name="2", norm_type=norm_type),  # (bs, 64, 64, 256)
-            upsample(64, 4, name="3", norm_type=norm_type),  # (bs, 128, 128, 128)
+            upsample(512, 4, name="0"),  # (bs, 16, 16, 1024)
+            upsample(256, 4, name="1"),  # (bs, 32, 32, 512)
+            upsample(128, 4, name="2"),  # (bs, 64, 64, 256)
+            upsample(64, 4, name="3"),  # (bs, 128, 128, 128)
         ]
 
         self.top = tf.keras.layers.Conv2DTranspose(filters=3, kernel_size=3, strides=2, padding='same',
                                                    name="top")  # 64x64 -> 128x128
 
-        batchnorm_layers = []
+        normalization_layers = []
         for layer in self.encoder.layers + [layer for decoder in self.decoder_layers for layer in decoder.layers]:
-            if isinstance(layer, tf.keras.layers.BatchNormalization):
-                batchnorm_layers.append(layer)
+            if isinstance(layer, ConditionalInstanceNormalization):
+                normalization_layers.append(layer)
 
-        log.debug(f"Found {len(batchnorm_layers)} batchnorm layers")
-        self.batchnorm_layers: typing.List[tf.keras.layers.BatchNormalization] = batchnorm_layers
-        self.style_predictor = style_predictor_factory_func(self.batchnorm_layers)
+        log.debug(f"Found {len(normalization_layers)} normalization layers")
+        self.normalization_layers: typing.List[tf.keras.layers.BatchNormalization] = normalization_layers
+        self.style_predictor = style_predictor_factory_func(self.normalization_layers)
 
     def call(self, inputs, training=None, mask=None):
         content_input, style_input = (inputs['content'], inputs['style'])
         style_params = self.style_predictor(style_input)
 
-        for i, batchnorm_layer in enumerate(self.batchnorm_layers):
-            beta = style_params[:, i * 2]
-            gamma = style_params[:, i * 2 + 1]
-
-            batchnorm_layer.beta = beta
-            batchnorm_layer.gamma = gamma
+        for i, normalization_layer in enumerate(self.normalization_layers):
+            scale = style_params[:, i * 2]
+            offset = style_params[:, i * 2 + 1]
+            normalization_layer.scale = scale
+            normalization_layer.offset = offset
 
         x_skip = self.encoder(content_input)
 
