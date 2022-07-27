@@ -6,6 +6,7 @@ import logsetup
 
 import tqdm.asyncio
 import logging
+
 log = logging.getLogger(__name__)
 
 target_dir = Path(__file__).parent.parent.absolute() / "data" / "wikiart"
@@ -144,21 +145,44 @@ def download_images():
 import tensorflow as tf
 
 
-def get_dataset(image_size: typing.Tuple[int, int]) -> (tf.data.Dataset, tf.data.Dataset):
+def get_dataset(shapes) -> (tf.data.Dataset, tf.data.Dataset):
     log.info("Loading WikiArt dataset...")
     init_dataset()
 
-    return load_dataset_from_path(image_dir, image_size)
+    return load_dataset_from_path(image_dir, shapes)
 
 
-def load_dataset_from_path(image_dir, image_size):
+def load_dataset_from_path(image_dir, shapes):
     args = {
         'seed': 219793472,
-        'image_size': image_size,
-        'validation_split': 0.2
+        'image_size': shapes['content'][-3:-1],
+        'validation_split': 0.2,
+        'batch_size': 4,
     }
-    training_dataset = tf.keras.utils.image_dataset_from_directory(image_dir.parent, subset="training", **args)
-    validation_dataset = tf.keras.utils.image_dataset_from_directory(image_dir.parent, subset="validation", **args)
+    pair_args = dict(args)
+    pair_args['seed'] = 47107027
+    pair_args['image_size'] = shapes['style'][-3:-1]
+
+    def _create_content_and_style_dataset(subset):
+        content_dataset: tf.data.Dataset = tf.keras.utils.image_dataset_from_directory(image_dir.parent, subset=subset,
+                                                                                       **args)
+        style_dataset: tf.data.Dataset = tf.keras.utils.image_dataset_from_directory(image_dir.parent,
+                                                                                     subset=subset,
+                                                                                     **pair_args)
+
+        def _pair_up_dataset():
+            for i, ((content, _), (style, _)) in enumerate(zip(content_dataset, style_dataset)):
+                datapoint = {'content': content, 'style': style}
+                yield datapoint
+
+        paired_dataset = tf.data.Dataset.from_generator(_pair_up_dataset, output_signature={
+            'content': tf.TensorSpec(shape=shapes['content'], dtype=tf.float32, name=None),
+            'style': tf.TensorSpec(shape=shapes['style'], dtype=tf.float32, name=None)
+        })
+        return paired_dataset
+
+    training_dataset = _create_content_and_style_dataset('training')
+    validation_dataset = _create_content_and_style_dataset('validation')
     return training_dataset, validation_dataset
 
 
@@ -170,7 +194,7 @@ def init_dataset():
             download_images()
 
 
-def get_dataset_debug(image_size: typing.Tuple[int, int]) -> (tf.data.Dataset, tf.data.Dataset):
+def get_dataset_debug(shapes) -> (tf.data.Dataset, tf.data.Dataset):
     log.info("Loading Debug WikiArt dataset...")
     init_dataset()
     if not debug_image_dir.exists():
@@ -183,4 +207,4 @@ def get_dataset_debug(image_size: typing.Tuple[int, int]) -> (tf.data.Dataset, t
             image = next(images)
             shutil.copyfile(image, debug_image_dir / image.name)
 
-    return load_dataset_from_path(debug_image_dir, image_size)
+    return load_dataset_from_path(debug_image_dir, shapes)

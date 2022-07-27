@@ -35,3 +35,8 @@ ch.setFormatter(ColorFormatter())
 logging.basicConfig(level=logging.DEBUG, handlers=[ch])
 
 logging.getLogger('h5py').setLevel(logging.WARN)
+
+
+# make numpy arrays smallerl
+import numpy
+numpy.set_printoptions(threshold=10, edgeitems=1)

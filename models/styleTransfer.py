@@ -68,11 +68,11 @@ def upsample(filters, size, name, norm_type='batchnorm', apply_dropout=False) ->
 
     return result
 
-
 class StyleTransferModel(tf.keras.Model):
 
     def __init__(self, input_shape,
                  style_predictor_factory_func: typing.Callable[[typing.List[tf.keras.layers.Layer]], tf.keras.Model],
+                 style_loss_func: typing.Callable,
                  norm_type='batchnorm', name="StyleTransferModel"):
         """Modified u-net generator model (https://arxiv.org/abs/1611.07004).
         Args:
@@ -83,8 +83,11 @@ class StyleTransferModel(tf.keras.Model):
           Generator model
         """
         super(StyleTransferModel, self).__init__(name=name)
+
+        self.style_loss = style_loss_func
+
         encoder_model = tf.keras.applications.mobilenet_v2.MobileNetV2(include_top=False,
-                                                                       input_shape=input_shape[-3:])
+                                                                       input_shape=input_shape['content'][-3:])
         encoder_model.trainable = False
 
         encoder_model_layers = [
@@ -117,20 +120,7 @@ class StyleTransferModel(tf.keras.Model):
         self.style_predictor = style_predictor_factory_func(self.batchnorm_layers)
 
     def call(self, inputs, training=None, mask=None):
-        if self.inbound_nodes:
-            if inputs.shape != self.input_shape:
-                raise ValueError(f"Input does not have the expected shape: {inputs.shape} vs. expected {self.input_shape}")
-
-        log.debug(inputs)
-        expected_shapes = (inputs.shape[0],) + inputs.shape[-3:]
-        content_input, style_input = (
-            tf.squeeze(tf.gather(inputs, indices=[0], axis=1), axis=1),
-            tf.squeeze(tf.gather(inputs, indices=[1], axis=1), axis=1)
-        )
-        assert content_input.shape == expected_shapes, \
-            f"content_input: {content_input.shape} vs. expected {expected_shapes}"
-        assert style_input.shape == expected_shapes, \
-            f"style_input: {style_input.shape} vs. expected {expected_shapes}"
+        content_input, style_input = (inputs['content'], inputs['style'])
         style_params = self.style_predictor(style_input)
 
         for i, batchnorm_layer in enumerate(self.batchnorm_layers):
@@ -149,5 +139,9 @@ class StyleTransferModel(tf.keras.Model):
             x = decoder_layer(x)
             if skip_connection is not None:
                 x = tf.keras.layers.Concatenate()([x, skip_connection])
+
+        x = self.top(x)
+
+        self.add_loss(self.style_loss(inputs, x))
 
         return x

@@ -1,4 +1,4 @@
-import keras
+from tensorflow import keras
 import tensorflow as tf
 
 
@@ -162,19 +162,20 @@ class StyleLossModelEfficientNet(tf.keras.models.Model):
 
         style_dict = {style_name: value for style_name, value in zip(self.style_layers, style_outputs)}
 
-        return {'content': content_dict, 'style': style_dict}
+        return {'content': content_outputs, 'style': style_outputs}
 
 
-def style_loss(loss_model: keras.Model, inputs: tf.Tensor, outputs: tf.Tensor):
+def style_loss(loss_model: keras.Model, x: tf.Tensor, y_pred: tf.Tensor):
     # perform feature extraction on the input content image and diff it against the output features
-    input_content = inputs[:, 0]
-    input_style = inputs[:, 1]
-    input_feature_values: tf.Tensor = loss_model(input_content)
-    output_feature_values: tf.Tensor = loss_model(outputs)
-    feature_loss = tf.nn.l2_loss(output_feature_values - input_feature_values)
+    input_content, input_style = x['content'], x['style']
+    input_feature_values: tf.Tensor = loss_model(input_content)['content']
+    output_feature_values: tf.Tensor = loss_model(y_pred)['content']
+
+    feature_loss = sum([tf.nn.l2_loss(out_value - in_value) for out_value, in_value in
+                        zip(input_feature_values, output_feature_values)])
 
     input_style_gram_value = gram_matrix(input_style)
-    output_gram_value = gram_matrix(outputs)
+    output_gram_value = gram_matrix(y_pred)
     gram_loss = tf.nn.l2_loss(output_gram_value - input_style_gram_value)
 
     return feature_loss + gram_loss

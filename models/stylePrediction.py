@@ -19,9 +19,15 @@ class StylePredictionModel(tf.keras.Model):
     def __init__(self, input_shape, batchnorm_layers, dropout_rate=0.2, name="StylePredictionModel"):
         super(StylePredictionModel, self).__init__(name=name)
         self.efficientNet = tf.keras.applications.efficientnet_v2.EfficientNetV2S(include_top=False,
-                                                                                  input_shape=input_shape[-3:])
+                                                                                  input_shape=input_shape['style'][-3:])
         self.dropout_rate = dropout_rate
         self.num_style_parameters = len(batchnorm_layers) * 2
+        self.top = tf.keras.layers.Dense(
+            self.num_style_parameters,
+            activation=tf.keras.activations.softmax,
+            kernel_initializer=DENSE_KERNEL_INITIALIZER,
+            bias_initializer=tf.constant_initializer(0),
+            name="style_predictions")
 
     def call(self, inputs, training=None, mask=None):
         x = self.efficientNet(inputs)
@@ -30,10 +36,5 @@ class StylePredictionModel(tf.keras.Model):
         if self.dropout_rate > 0:
             x = tf.keras.layers.Dropout(self.dropout_rate, name="top_dropout")(x)
 
-        x = tf.keras.layers.Dense(
-            self.num_style_parameters,
-            activation=tf.keras.activations.softmax,
-            kernel_initializer=DENSE_KERNEL_INITIALIZER,
-            bias_initializer=tf.constant_initializer(0),
-            name="style_predictions")(x)
+        x = self.top(x)
         return x
