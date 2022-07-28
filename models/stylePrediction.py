@@ -17,18 +17,26 @@ DENSE_KERNEL_INITIALIZER = {
 class StylePredictionModelBase(tf.keras.Model):
     feature_extractor = None
 
-    def __init__(self, batchnorm_layers, dropout_rate=0.2, name="StylePredictionModel"):
+    def __init__(self, norm_layers, num_style_parameters=100, dropout_rate=0.2, name="StylePredictionModel"):
         super(StylePredictionModelBase, self).__init__(name=name)
 
         self.dropout_rate = dropout_rate
-        num_style_parameters = len(batchnorm_layers) * 2
         # todo: add second dense layer as suggested in Ghiasi et al., 2017
-        self.top = tf.keras.layers.Dense(
+        self.style_predictor = tf.keras.layers.Dense(
             num_style_parameters,
             activation=tf.keras.activations.softmax,
             kernel_initializer=DENSE_KERNEL_INITIALIZER,
             bias_initializer=tf.constant_initializer(0),
-            name="style_predictions")
+            name="style_predictor")
+
+        num_norm_parameters = sum([norm.num_feature_maps for norm in norm_layers])
+        log.debug(f"Using {num_norm_parameters} norm parameters")
+        self.style_norm_predictor = tf.keras.layers.Dense(
+            num_norm_parameters,
+            activation=tf.keras.activations.softmax,
+            kernel_initializer=DENSE_KERNEL_INITIALIZER,
+            bias_initializer=tf.constant_initializer(0),
+            name="style_norm_predictor")
 
     def call(self, inputs, training=None, mask=None):
         x = self.feature_extractor(inputs)
@@ -37,23 +45,26 @@ class StylePredictionModelBase(tf.keras.Model):
         if self.dropout_rate > 0:
             x = tf.keras.layers.Dropout(self.dropout_rate, name="top_dropout")(x)
 
-        x = self.top(x)
+        x = self.style_predictor(x)
+        x = self.style_norm_predictor(x)
         return x
 
 
 class StylePredictionModelEfficientNet(StylePredictionModelBase):
 
-    def __init__(self, input_shape, batchnorm_layers, dropout_rate=0.2, name="StylePredictionModelEfficientNet"):
-        super(StylePredictionModelEfficientNet, self).__init__(batchnorm_layers, dropout_rate, name=name)
+    def __init__(self, input_shape, norm_layers, dropout_rate=0.2, name="StylePredictionModelEfficientNet"):
+        super(StylePredictionModelEfficientNet, self).__init__(norm_layers, dropout_rate=dropout_rate, name=name)
         self.feature_extractor = \
             tf.keras.applications.efficientnet_v2.EfficientNetV2S(include_top=False,
                                                                   input_shape=input_shape['style'][-3:])
+        self.feature_extractor.trainable = False
 
 
 class StylePredictionModelMobileNet(StylePredictionModelBase):
 
-    def __init__(self, input_shape, batchnorm_layers, dropout_rate=0.2, name="StylePredictionModel"):
-        super(StylePredictionModelMobileNet, self).__init__(batchnorm_layers, dropout_rate, name=name)
+    def __init__(self, input_shape, norm_layers, dropout_rate=0.2, name="StylePredictionModel"):
+        super(StylePredictionModelMobileNet, self).__init__(norm_layers, dropout_rate=dropout_rate, name=name)
         self.feature_extractor = \
             tf.keras.applications.MobileNetV3Small(include_top=False,
                                                    input_shape=input_shape['style'][-3:])
+        self.feature_extractor.trainable = False

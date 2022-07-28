@@ -10,13 +10,15 @@ log = logging.getLogger(__name__)
 class ConditionalInstanceNormalization(tf.keras.layers.Layer):
     """Instance Normalization Layer (https://arxiv.org/abs/1607.08022)."""
 
-    def __init__(self, epsilon=1e-5):
+    def __init__(self, num_feature_maps, epsilon=1e-5):
         super(ConditionalInstanceNormalization, self).__init__()
         self.epsilon = epsilon
-        self.scale = 1
-        self.offset = 0
+        self.scale = None
+        self.offset = None
+        self.num_feature_maps = num_feature_maps
 
     def call(self, x):
+        assert x.shape[-1] == self.num_feature_maps
         mean, variance = tf.nn.moments(x, axes=[1, 2], keepdims=True)
         inv = tf.math.rsqrt(variance + self.epsilon)
         normalized = (x - mean) * inv
@@ -45,7 +47,7 @@ def upsample(filters, size, name, apply_dropout=False) -> tf.keras.Sequential:
                                         kernel_initializer=initializer,
                                         use_bias=False, name=f"{name}_conv"))
 
-    result.add(ConditionalInstanceNormalization())
+    result.add(ConditionalInstanceNormalization(filters))
 
     if apply_dropout:
         result.add(tf.keras.layers.Dropout(0.5))
@@ -109,9 +111,13 @@ class StyleTransferModel(tf.keras.Model):
         content_input, style_input = (inputs['content'], inputs['style'])
         style_params = self.style_predictor(style_input)
 
+        style_norm_param_lower_bound = 0
         for i, normalization_layer in enumerate(self.normalization_layers):
-            scale = style_params[:, i * 2]
-            offset = style_params[:, i * 2 + 1]
+            style_norm_param_upper_bound = style_norm_param_lower_bound + normalization_layer.num_feature_maps
+            scale = style_params[:, style_norm_param_lower_bound: style_norm_param_upper_bound]
+            offset = style_params[:, style_norm_param_lower_bound: style_norm_param_upper_bound]
+            scale, offset = tf.expand_dims(scale, -2), tf.expand_dims(offset, -2)
+            scale, offset = tf.expand_dims(scale, -2), tf.expand_dims(offset, -2)
             normalization_layer.scale = scale
             normalization_layer.offset = offset
 
