@@ -35,6 +35,7 @@ ch.setFormatter(ColorFormatter())
 logging.basicConfig(level=logging.DEBUG, handlers=[ch])
 
 logging.getLogger('h5py').setLevel(logging.WARN)
+logging.getLogger('matplotlib').setLevel(logging.WARN)
 
 
 # make numpy arrays smallerl

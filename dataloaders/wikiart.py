@@ -158,6 +158,7 @@ def load_dataset_from_path(image_dir, shapes):
         'image_size': shapes['content'][-3:-1],
         'validation_split': 0.2,
         'batch_size': 4,
+        'color_mode': 'rgb',
     }
     pair_args = dict(args)
     pair_args['seed'] = 47107027
@@ -169,6 +170,8 @@ def load_dataset_from_path(image_dir, shapes):
         style_dataset: tf.data.Dataset = tf.keras.utils.image_dataset_from_directory(image_dir.parent,
                                                                                      subset=subset,
                                                                                      **pair_args)
+        content_dataset, style_dataset = (content_dataset.map(lambda x, _: (x / 255.0, _)),
+                                          style_dataset.map(lambda x, _: (x / 255.0, _)))
 
         def _pair_up_dataset():
             for i, ((content, _), (style, _)) in enumerate(zip(content_dataset, style_dataset)):
