@@ -36,6 +36,7 @@ logging.basicConfig(level=logging.DEBUG, handlers=[ch])
 
 logging.getLogger('h5py').setLevel(logging.WARN)
 logging.getLogger('matplotlib').setLevel(logging.WARN)
+logging.getLogger('PIL').setLevel(logging.INFO)
 
 
 # make numpy arrays smallerl

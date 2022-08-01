@@ -2,7 +2,9 @@ from tensorflow import keras
 import tensorflow as tf
 
 import logging
+
 log = logging.getLogger(__name__)
+
 
 def vgg_layers(layer_names):
     """#### Intermediate layers for style and content
@@ -93,13 +95,11 @@ class StyleLossModelBase(tf.keras.models.Model):
         outputs = self.feature_extractor(inputs)
         style_outputs, content_outputs = (outputs[:self.num_style_layers], outputs[self.num_style_layers:])
 
-        style_outputs = [gram_matrix(style_output) for style_output in style_outputs]
-
         content_dict = {content_name: value for content_name, value in zip(self.content_layers, content_outputs)}
 
         style_dict = {style_name: value for style_name, value in zip(self.style_layers, style_outputs)}
 
-        return {'content': content_outputs, 'style': style_outputs}
+        return {'content': content_dict, 'style': style_dict}
 
 
 class StyleLossModelVGG(StyleLossModelBase):
@@ -208,14 +208,22 @@ class StyleLossModelMobileNet(StyleLossModelBase):
 def style_loss(loss_model: keras.Model, x: tf.Tensor, y_pred: tf.Tensor):
     # perform feature extraction on the input content image and diff it against the output features
     input_content, input_style = x['content'], x['style']
-    input_feature_values: tf.Tensor = loss_model(input_content)['content']
-    output_feature_values: tf.Tensor = loss_model(y_pred)['content']
+    loss_data_input = loss_model(input_content)
+    loss_data_prediction = loss_model(y_pred)
+    input_feature_values: tf.Tensor = loss_data_input['content']
+    input_style_features: tf.Tensor = loss_data_input['style']
+    output_feature_values: tf.Tensor = loss_data_prediction['content']
+    output_style_features: tf.Tensor = loss_data_prediction['style']
 
-    feature_loss = sum([tf.nn.l2_loss(out_value - in_value) for out_value, in_value in
-                        zip(input_feature_values, output_feature_values)])
+    feature_loss = sum([tf.nn.l2_loss(out_value - in_value) for (input_layer, in_value), (out_layer, out_value) in
+                        zip(input_feature_values.items(), output_feature_values.items())])
+
+    style_loss = sum([tf.nn.l2_loss(gram_matrix(out_value) - gram_matrix(in_value)) for
+                      (input_layer, in_value), (out_layer, out_value) in
+                      zip(input_style_features.items(), output_style_features.items())])
 
     input_style_gram_value = gram_matrix(input_style)
     output_gram_value = gram_matrix(y_pred)
     gram_loss = tf.nn.l2_loss(output_gram_value - input_style_gram_value)
 
-    return feature_loss + gram_loss
+    return feature_loss + gram_loss + style_loss

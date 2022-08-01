@@ -1,3 +1,3 @@
 
 
-import logsetup
+from . import logsetup

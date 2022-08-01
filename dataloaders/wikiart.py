@@ -1,8 +1,10 @@
 import shutil
 import typing
+import unittest
 from pathlib import Path
 
-import logsetup
+import PIL.Image
+import numpy as np
 
 import tqdm.asyncio
 import logging
@@ -10,8 +12,8 @@ import logging
 log = logging.getLogger(__name__)
 
 target_dir = Path(__file__).parent.parent.absolute() / "data" / "wikiart"
-image_dir = target_dir / 'images' / 'painting'
-debug_image_dir = target_dir / 'debug_images' / 'painting'
+image_dir = target_dir / 'images'
+debug_image_dir = target_dir / 'debug_images'
 manifest_filepath = target_dir / 'wikiart_scraped.csv'
 
 
@@ -143,6 +145,7 @@ def download_images():
 
 
 import tensorflow as tf
+import math
 
 
 def get_dataset(shapes) -> (tf.data.Dataset, tf.data.Dataset):
@@ -152,35 +155,71 @@ def get_dataset(shapes) -> (tf.data.Dataset, tf.data.Dataset):
     return load_dataset_from_path(image_dir, shapes)
 
 
-def load_dataset_from_path(image_dir, shapes):
-    args = {
-        'seed': 219793472,
-        'image_size': shapes['content'][-3:-1],
-        'validation_split': 0.2,
-        'batch_size': 4,
-        'color_mode': 'rgb',
-    }
-    pair_args = dict(args)
-    pair_args['seed'] = 47107027
-    pair_args['image_size'] = shapes['style'][-3:-1]
+def _preprocess_image(image, shape):
+    aspect_ratio_image = image.size[0] / image.size[1]
+    aspect_ratio_target = shape[0] / shape[1]
+    should_scale_to_target_y = aspect_ratio_image > aspect_ratio_target
 
+    new_size = (math.ceil(shape[1] * aspect_ratio_image), shape[1]) if should_scale_to_target_y else (
+        shape[0], math.ceil(shape[0] / aspect_ratio_image))
+    image = image.resize(new_size)
+
+    width, height = image.size
+
+    left = (width - shape[0]) / 2
+    top = (height - shape[1]) / 2
+    right = (width + shape[0]) / 2
+    bottom = (height + shape[1]) / 2
+
+    # Crop the center of the image
+    image = image.crop((left, top, right, bottom))
+    return image
+
+
+def _load_images_from_directory(image_dir: Path, shape) -> typing.Generator[PIL.Image.Image, None, None]:
+    import os
+
+    for root, dirnames, filenames in os.walk(image_dir):
+        for filename in filenames:
+            filepath = Path(root) / Path(filename)
+            if not filename.endswith(".jpg"):
+                log.debug(f"Ignoring {filepath} because it has an invalid suffix")
+                continue
+
+            image = tf.keras.utils.load_img(path=filepath, interpolation="lanczos",
+                                            color_mode='rgb' if shape[2] == 3 else 'rgba')
+            image = _preprocess_image(image, (shape[1], shape[0], shape[2]))
+            yield image
+
+
+def _image_dataset_from_directory(image_dir: Path, shape):
+    def generate_image_tensors():
+        for image in _load_images_from_directory(image_dir, shape):
+            tensor: np.ndarray = tf.keras.utils.img_to_array(image, 'channels_last', dtype="float32")
+            tensor = tensor / 255.0
+            tensor: tf.Tensor = tf.convert_to_tensor(tensor)
+            yield tensor
+
+    dataset = tf.data.Dataset.from_generator(generate_image_tensors,
+                                             output_signature=tf.TensorSpec((shape[0], shape[1], 3)))
+    return dataset
+
+
+def load_dataset_from_path(image_dir, shapes) -> (tf.data.Dataset, tf.data.Dataset):
     def _create_content_and_style_dataset(subset):
-        content_dataset: tf.data.Dataset = tf.keras.utils.image_dataset_from_directory(image_dir.parent, subset=subset,
-                                                                                       **args)
-        style_dataset: tf.data.Dataset = tf.keras.utils.image_dataset_from_directory(image_dir.parent,
-                                                                                     subset=subset,
-                                                                                     **pair_args)
-        content_dataset, style_dataset = (content_dataset.map(lambda x, _: (x / 255.0, _)),
-                                          style_dataset.map(lambda x, _: (x / 255.0, _)))
+        # todo use different content images
+        content_dataset: tf.data.Dataset = _image_dataset_from_directory(image_dir / subset, shapes['content'])
+        style_dataset: tf.data.Dataset = _image_dataset_from_directory(image_dir / subset, shapes['style'])
+        content_dataset = content_dataset.shuffle(buffer_size=10, seed=217289)
 
         def _pair_up_dataset():
-            for i, ((content, _), (style, _)) in enumerate(zip(content_dataset, style_dataset)):
+            for i, (content, style) in enumerate(zip(content_dataset, style_dataset)):
                 datapoint = {'content': content, 'style': style}
                 yield datapoint
 
         paired_dataset = tf.data.Dataset.from_generator(_pair_up_dataset, output_signature={
-            'content': tf.TensorSpec(shape=shapes['content'], dtype=tf.float32, name=None),
-            'style': tf.TensorSpec(shape=shapes['style'], dtype=tf.float32, name=None)
+            'content': tf.TensorSpec(shape=shapes['content'], dtype=tf.dtypes.float32, name=None),
+            'style': tf.TensorSpec(shape=shapes['style'], dtype=tf.dtypes.float32, name=None)
         })
         return paired_dataset
 
@@ -200,15 +239,30 @@ def init_dataset():
 def get_dataset_debug(shapes) -> (tf.data.Dataset, tf.data.Dataset):
     log.info("Loading Debug WikiArt dataset...")
     init_dataset()
-    if not debug_image_dir.exists():
-        log.info(f"{debug_image_dir} does not exist. Creating it.")
-        debug_image_dir.mkdir(parents=True)
+    training_dir = debug_image_dir / "training"
+    validation_dir = debug_image_dir / "validation"
+    for needed_image_dir in [debug_image_dir, training_dir, validation_dir]:
+        if not needed_image_dir.exists():
+            log.info(f"{needed_image_dir} does not exist. Creating it.")
+            needed_image_dir.mkdir(parents=True)
+
     num_images = 100
     if len(list(debug_image_dir.iterdir())) != num_images:
         log.info(f"Copying debug images to {debug_image_dir}")
         images = image_dir.iterdir()
         for i in range(num_images):
             image = next(images)
-            shutil.copyfile(image, debug_image_dir / image.name)
+            subset = "training" if i < 80 else "validation"
+            debug_image_path = debug_image_dir / subset / image.name
+            shutil.copyfile(image, debug_image_path)
 
-    return load_dataset_from_path(debug_image_dir, shapes)
+    if shapes['content'][0] is None:
+        training_dataset, validation_dataset = load_dataset_from_path(debug_image_dir,
+                                                                      {key: shape[1:] for key, shape in shapes.items()})
+        training_dataset = training_dataset.batch(9)
+        validation_dataset = validation_dataset.batch(9)
+    else:
+        training_dataset, validation_dataset = load_dataset_from_path(debug_image_dir, shapes)
+
+    training_dataset, validation_dataset = training_dataset.cache(), validation_dataset.cache()
+    return training_dataset, validation_dataset
