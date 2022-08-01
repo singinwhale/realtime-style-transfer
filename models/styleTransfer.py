@@ -98,10 +98,9 @@ class StyleTransferModel(tf.keras.Model):
         self.top = tf.keras.layers.Conv2DTranspose(filters=3, kernel_size=3, strides=2, padding='same',
                                                    name="top")  # 64x64 -> 128x128
 
-        normalization_layers = []
-        for layer in self.encoder.layers + [layer for decoder in self.decoder_layers for layer in decoder.layers]:
-            if isinstance(layer, ConditionalInstanceNormalization):
-                normalization_layers.append(layer)
+        potential_layers = self.encoder.layers + [layer for decoder in self.decoder_layers for layer in decoder.layers]
+        normalization_layers = list(filter(lambda layer: isinstance(layer, ConditionalInstanceNormalization),
+                                           potential_layers))
 
         log.debug(f"Found {len(normalization_layers)} normalization layers")
         self.normalization_layers: typing.List[tf.keras.layers.BatchNormalization] = normalization_layers
@@ -112,7 +111,7 @@ class StyleTransferModel(tf.keras.Model):
         style_params = self.style_predictor(style_input)
 
         style_norm_param_lower_bound = 0
-        for i, normalization_layer in enumerate(self.normalization_layers):
+        for normalization_layer in self.normalization_layers:
             style_norm_param_upper_bound = style_norm_param_lower_bound + normalization_layer.num_feature_maps
             scale = style_params[:, style_norm_param_lower_bound: style_norm_param_upper_bound]
             offset = style_params[:, style_norm_param_lower_bound: style_norm_param_upper_bound]

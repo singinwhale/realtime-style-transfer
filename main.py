@@ -45,6 +45,7 @@ with summary_writer.as_default() as summary:
 
     tb_callback = tf.keras.callbacks.TensorBoard(log_dir=str(log_dir))
     predict_datapoint(log_datapoint, style_transfer_model)
-    style_transfer_model.fit(x=training_dataset, validation_data=validation_dataset, epochs=20,
+    style_transfer_model.fit(x=training_dataset, validation_data=validation_dataset, epochs=200,
                              callbacks=[tb_callback, image_callback])
+    style_transfer_model.save_weights(log_dir / "last_training_checkpoint")
     predict_datapoint(log_datapoint, style_transfer_model)
