@@ -21,7 +21,6 @@ class StylePredictionModelBase(tf.keras.Model):
         super(StylePredictionModelBase, self).__init__(name=name)
 
         self.dropout_rate = dropout_rate
-        # todo: add second dense layer as suggested in Ghiasi et al., 2017
         self.style_predictor = tf.keras.layers.Dense(
             num_style_parameters,
             activation=tf.keras.activations.softmax,

@@ -64,7 +64,6 @@ def image_dataset_from_directory(image_dir: Path, shape):
 def load_content_and_style_dataset_from_paths(content_image_dir, style_image_dir, shapes) -> \
         (tf.data.Dataset, tf.data.Dataset):
     def _create_content_and_style_dataset(subset):
-        # todo use different content images
         content_dataset: tf.data.Dataset = image_dataset_from_directory(content_image_dir / subset, shapes['content'])
         style_dataset: tf.data.Dataset = image_dataset_from_directory(style_image_dir / subset, shapes['style'])
         content_dataset = content_dataset.shuffle(buffer_size=100, seed=217289)
