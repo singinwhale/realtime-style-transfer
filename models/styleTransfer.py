@@ -1,5 +1,6 @@
 import typing
 
+import keras.layers
 import tensorflow as tf
 
 import logging
@@ -22,32 +23,57 @@ class ConditionalInstanceNormalization(tf.keras.layers.Layer):
         mean, variance = tf.nn.moments(x, axes=[1, 2], keepdims=True)
         inv = tf.math.rsqrt(variance + self.epsilon)
         normalized = (x - mean) * inv
+        if self.scale is None or self.offset is None:
+            return normalized
+
         return self.scale * normalized + self.offset
 
 
-def upsample(filters, size, name, apply_dropout=False) -> tf.keras.Sequential:
-    """Upsamples an input.
-    Conv2DTranspose => Batchnorm => Dropout => Relu
-    Args:
-      filters: number of filters
-      size: filter size
-      name: name infix of the layers in this upsampler
-      norm_type: Normalization type; either 'batchnorm' or 'instancenorm'.
-      apply_dropout: If True, adds the dropout layer
-    Returns:
-      Upsample Sequential Model
-    """
-    name = f"upsample_{name}"
+def expand(filters, size, strides, name, apply_dropout=False) -> tf.keras.Sequential:
+    name = f"expand_{name}"
     initializer = tf.random_normal_initializer(0., 0.02)
 
     result = tf.keras.Sequential(name=name)
     result.add(
-        tf.keras.layers.Conv2DTranspose(filters, size, strides=2,
-                                        padding='same',
-                                        kernel_initializer=initializer,
-                                        use_bias=False, name=f"{name}_conv"))
+        tf.keras.layers.Conv2D(filters, size, strides=strides,
+                               padding='same',
+                               kernel_initializer=initializer,
+                               use_bias=False, name=f"{name}_conv"))
 
     result.add(ConditionalInstanceNormalization(filters))
+
+    if apply_dropout:
+        result.add(tf.keras.layers.Dropout(0.5))
+
+    result.add(tf.keras.layers.ReLU())
+
+    return result
+
+
+def residual_block(input_shape, filters, size, strides, name, apply_dropout=False) -> tf.keras.Model:
+    inputs = tf.keras.Input(shape=input_shape)
+    fx = keras.layers.Conv2D(filters, size, strides=strides, activation='relu', padding='same')(inputs)
+    fx = keras.layers.BatchNormalization()(fx)
+    fx = keras.layers.Conv2D(filters, size, strides=strides, padding='same')(fx)
+    out = keras.layers.Add()([inputs, fx])
+    out = keras.layers.ReLU()(out)
+    out = keras.layers.BatchNormalization()(out)
+    return keras.models.Model(inputs, out)
+
+
+def contract(filters, size, strides, name, apply_dropout=False) -> tf.keras.Sequential:
+    name = f"contract_{name}"
+    initializer = tf.random_normal_initializer(0., 0.02)
+
+    result = tf.keras.Sequential(name=name)
+    result.add(
+        tf.keras.layers.Conv2D(filters, size,
+                               strides=strides,
+                               padding='same',
+                               kernel_initializer=initializer,
+                               use_bias=False, name=f"{name}_conv"))
+
+    result.add(keras.layers.BatchNormalization())
 
     if apply_dropout:
         result.add(tf.keras.layers.Dropout(0.5))
@@ -74,29 +100,35 @@ class StyleTransferModel(tf.keras.Model):
 
         self.style_loss = style_loss_func
 
-        encoder_model = tf.keras.applications.mobilenet_v2.MobileNetV2(include_top=False,
-                                                                       input_shape=input_shape['content'][-3:])
-        encoder_model.trainable = False
+        # encoder_model = tf.keras.applications.mobilenet_v2.MobileNetV2(include_top=False,
+        #                                                               input_shape=input_shape['content'][-3:])
+        # encoder_model.trainable = True
+        # self.encoder = encoder_model
 
-        encoder_model_layers = [
-            'block_1_expand_relu',  # 64x64
-            'block_3_expand_relu',  # 32x32
-            'block_6_expand_relu',  # 16x16
-            'block_13_expand_relu',  # 8x8
-            'block_16_project',  # 4x4
-        ]
-        encoder_model_layers = [encoder_model.get_layer(layer_name).output for layer_name in encoder_model_layers]
+        self.encoder = tf.keras.Sequential(layers=[
+            contract(32, 9, 1, name="0"),
+            contract(64, 3, 2, name="1"),
+            contract(128, 3, 2, name="2"),
+        ], name="encoder")
 
-        self.encoder = tf.keras.Model(inputs=encoder_model.input, outputs=encoder_model_layers)
+        res_input_shape = (input_shape['content'][1], input_shape['content'][2], 128)
+        log.debug(f"res_input_shape: {res_input_shape}")
+        self.bottleneck = tf.keras.Sequential(layers=[
+            residual_block(res_input_shape, 128, 3, 1, name="0"),
+            residual_block(res_input_shape, 128, 3, 1, name="1"),
+            residual_block(res_input_shape, 128, 3, 1, name="2"),
+            residual_block(res_input_shape, 128, 3, 1, name="3"),
+            residual_block(res_input_shape, 128, 3, 1, name="4"),
+        ], name="bottleneck")
+
         self.decoder_layers = [
-            upsample(512, 4, name="0"),  # (bs, 16, 16, 1024)
-            upsample(256, 4, name="1"),  # (bs, 32, 32, 512)
-            upsample(128, 4, name="2"),  # (bs, 64, 64, 256)
-            upsample(64, 4, name="3"),  # (bs, 128, 128, 128)
+            expand(64, 3, 2, name="1"),
+            expand(32, 3, 2, name="2"),
         ]
 
-        self.top = tf.keras.layers.Conv2DTranspose(filters=3, kernel_size=3, strides=2, padding='same',
-                                                   name="top")  # 64x64 -> 128x128
+        self.top = tf.keras.Sequential(layers=[
+            tf.keras.layers.Conv2D(filters=3, kernel_size=9, strides=1, padding='same'),  # -> (1, 480, 960, 3)
+        ], name="Top")
 
         potential_layers = self.encoder.layers + [layer for decoder in self.decoder_layers for layer in decoder.layers]
         normalization_layers = list(filter(lambda layer: isinstance(layer, ConditionalInstanceNormalization),
@@ -120,18 +152,20 @@ class StyleTransferModel(tf.keras.Model):
             normalization_layer.scale = scale
             normalization_layer.offset = offset
 
-        x_skip = self.encoder(content_input)
-
-        x = x_skip[-1]
-        skip_connections = reversed(x_skip[:-1])
-
-        for decoder_layer, skip_connection in zip(self.decoder_layers, skip_connections):
+        x = self.encoder(content_input)
+        log.debug(f"bottleneck input_shape: {x.shape}")
+        x = self.bottleneck(x)
+        for decoder_layer in self.decoder_layers:
             x = decoder_layer(x)
-            if skip_connection is not None:
-                x = tf.keras.layers.Concatenate()([x, skip_connection])
 
         x = self.top(x)
+        x = tf.nn.sigmoid(x)
 
-        self.add_loss(self.style_loss(inputs, x))
+        losses = self.style_loss(inputs, x)
+        self.add_loss(losses['loss'])
+        self.add_metric(value=losses['feature_loss'], name="feature_loss")
+        self.add_metric(value=losses['gram_loss'], name="gram_loss")
+        self.add_metric(value=losses['style_loss'], name="style_loss")
+        self.add_metric(value=losses['ssim_loss'], name="ssim_loss")
 
         return x

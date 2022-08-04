@@ -11,7 +11,7 @@ class WikiartDataloaderTests(unittest.TestCase):
 
     def test_image_dataset_from_directory(self):
         shape = (960, 1920, 3)
-        dataset = wikiart._image_dataset_from_directory(wikiart.debug_image_dir, shape)
+        dataset = wikiart._image_dataset_from_directory(wikiart.style_debug_image_dir, shape)
         image: tf.Tensor
         for image in dataset:
             self.assertEqual(image.shape, shape)

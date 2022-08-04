@@ -225,5 +225,11 @@ def style_loss(loss_model: keras.Model, x: tf.Tensor, y_pred: tf.Tensor):
     input_style_gram_value = gram_matrix(input_style)
     output_gram_value = gram_matrix(y_pred)
     gram_loss = tf.nn.l2_loss(output_gram_value - input_style_gram_value)
-
-    return feature_loss + gram_loss + style_loss
+    ssim_loss = tf.nn.l2_loss(tf.image.ssim_multiscale(y_pred, input_content, max_val=1))
+    return {
+        "loss": feature_loss + gram_loss + style_loss + ssim_loss,
+        "feature_loss": feature_loss,
+        "gram_loss": gram_loss,
+        "style_loss": style_loss,
+        "ssim_loss": ssim_loss,
+    }

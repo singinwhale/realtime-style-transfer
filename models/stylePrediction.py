@@ -26,7 +26,7 @@ class StylePredictionModelBase(tf.keras.Model):
             num_style_parameters,
             activation=tf.keras.activations.softmax,
             kernel_initializer=DENSE_KERNEL_INITIALIZER,
-            bias_initializer=tf.constant_initializer(0),
+            bias_initializer=tf.constant_initializer(1),
             name="style_predictor")
 
         num_norm_parameters = sum([norm.num_feature_maps for norm in norm_layers])
@@ -35,7 +35,7 @@ class StylePredictionModelBase(tf.keras.Model):
             num_norm_parameters,
             activation=tf.keras.activations.softmax,
             kernel_initializer=DENSE_KERNEL_INITIALIZER,
-            bias_initializer=tf.constant_initializer(0),
+            bias_initializer=tf.constant_initializer(0.5),
             name="style_norm_predictor")
 
     def call(self, inputs, training=None, mask=None):
@@ -57,7 +57,7 @@ class StylePredictionModelEfficientNet(StylePredictionModelBase):
         self.feature_extractor = \
             tf.keras.applications.efficientnet_v2.EfficientNetV2S(include_top=False,
                                                                   input_shape=input_shape['style'][-3:])
-        self.feature_extractor.trainable = False
+        self.feature_extractor.trainable = True
 
 
 class StylePredictionModelMobileNet(StylePredictionModelBase):
@@ -67,4 +67,4 @@ class StylePredictionModelMobileNet(StylePredictionModelBase):
         self.feature_extractor = \
             tf.keras.applications.MobileNetV3Small(include_top=False,
                                                    input_shape=input_shape['style'][-3:])
-        self.feature_extractor.trainable = False
+        self.feature_extractor.trainable = True
