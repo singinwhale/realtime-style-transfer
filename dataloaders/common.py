@@ -1,4 +1,5 @@
 import logging
+import random
 from pathlib import Path
 import math
 import PIL.Image
@@ -31,54 +32,96 @@ def _preprocess_image(image, shape):
     return image
 
 
-def _load_images_from_directory(image_dir: Path, shape) -> typing.Generator[PIL.Image.Image, None, None]:
+def _load_image_from_file(filepath, shape):
+    image = tf.keras.utils.load_img(path=filepath, interpolation="lanczos",
+                                    color_mode='rgb' if shape[2] == 3 else 'rgba')
+    image = _preprocess_image(image, (shape[1], shape[0], shape[2]))
+    return image
+
+
+def _load_images_from_directory(image_dir: Path, shape, **kwargs) -> typing.Generator[PIL.Image.Image, None, None]:
     import os
     log.debug(f"Searching for images in {image_dir}")
+    rng = None
+    if 'seed' in kwargs:
+        rng = random.Random(kwargs['seed'])
+
     for root, dirnames, filenames in os.walk(image_dir):
         log.debug(f"Found {len(filenames)} files in {root}")
+
+        if rng:
+            rng.shuffle(filenames)
+
         for filename in filenames:
             filepath = Path(root) / Path(filename)
             if filepath.suffix not in PIL.Image.EXTENSION:
                 log.debug(f"Ignoring {filepath} because it has an invalid suffix")
                 continue
 
-            image = tf.keras.utils.load_img(path=filepath, interpolation="lanczos",
-                                            color_mode='rgb' if shape[2] == 3 else 'rgba')
-            image = _preprocess_image(image, (shape[1], shape[0], shape[2]))
+            image = _load_image_from_file(filepath, shape)
             yield image
 
 
-def image_dataset_from_directory(image_dir: Path, shape):
+def _image_to_tensor(image) -> tf.Tensor:
+    tensor: np.ndarray = tf.keras.utils.img_to_array(image, 'channels_last', dtype="float32")
+    tensor = tensor / 255.0
+    tensor: tf.Tensor = tf.convert_to_tensor(tensor)
+    return tensor
+
+
+def image_dataset_from_directory(image_dir: Path, shape, **kwargs):
     def generate_image_tensors():
-        for image in _load_images_from_directory(image_dir, shape):
-            tensor: np.ndarray = tf.keras.utils.img_to_array(image, 'channels_last', dtype="float32")
-            tensor = tensor / 255.0
-            tensor: tf.Tensor = tf.convert_to_tensor(tensor)
-            yield tensor
+        for image in _load_images_from_directory(image_dir, shape, **kwargs):
+            yield _image_to_tensor(image)
 
     dataset = tf.data.Dataset.from_generator(generate_image_tensors,
                                              output_signature=tf.TensorSpec((shape[0], shape[1], 3)))
     return dataset
 
 
-def load_content_and_style_dataset_from_paths(content_image_dir, style_image_dir, shapes) -> \
+def image_dataset_from_filepaths(filepaths, shape):
+    def generate_image_tensors():
+        for imagepath in filepaths:
+            try:
+                image = _load_image_from_file(imagepath, shape)
+                yield _image_to_tensor(image)
+            except Exception as e:
+                log.warning(f"Could not read image {imagepath}: {e}")
+
+    dataset = tf.data.Dataset.from_generator(generate_image_tensors,
+                                             output_signature=tf.TensorSpec((shape[0], shape[1], 3)))
+    return dataset
+
+
+def pair_up_content_and_style_datasets(content_dataset, style_dataset, shapes):
+    def _pair_up_dataset():
+        for i, (content, style) in enumerate(zip(content_dataset, style_dataset)):
+            datapoint = {'content': content, 'style': style}
+            yield datapoint
+
+    paired_dataset = tf.data.Dataset.from_generator(_pair_up_dataset, output_signature={
+        'content': tf.TensorSpec(shape=shapes['content'], dtype=tf.dtypes.float32, name=None),
+        'style': tf.TensorSpec(shape=shapes['style'], dtype=tf.dtypes.float32, name=None)
+    })
+    return paired_dataset
+
+
+def load_training_and_validation_dataset_from_directory(image_dir, shape, **kwargs):
+    def _create_content_and_style_dataset(subset):
+        dataset: tf.data.Dataset = image_dataset_from_directory(image_dir / subset, shape, **kwargs)
+        return dataset
+
+    training_dataset = _create_content_and_style_dataset('training')
+    validation_dataset = _create_content_and_style_dataset('validation')
+    return training_dataset, validation_dataset
+
+
+def load_content_and_style_dataset_from_paths(content_image_dir, style_image_dir, shapes, **kwargs) -> \
         (tf.data.Dataset, tf.data.Dataset):
     def _create_content_and_style_dataset(subset):
-        content_dataset: tf.data.Dataset = image_dataset_from_directory(content_image_dir / subset, shapes['content'])
-        style_dataset: tf.data.Dataset = image_dataset_from_directory(style_image_dir / subset, shapes['style'])
-        content_dataset = content_dataset.shuffle(buffer_size=100, seed=217289)
-        style_dataset = style_dataset.shuffle(buffer_size=100, seed=8828)
-
-        def _pair_up_dataset():
-            for i, (content, style) in enumerate(zip(content_dataset, style_dataset)):
-                datapoint = {'content': content, 'style': style}
-                yield datapoint
-
-        paired_dataset = tf.data.Dataset.from_generator(_pair_up_dataset, output_signature={
-            'content': tf.TensorSpec(shape=shapes['content'], dtype=tf.dtypes.float32, name=None),
-            'style': tf.TensorSpec(shape=shapes['style'], dtype=tf.dtypes.float32, name=None)
-        })
-        return paired_dataset
+        content_dataset: tf.data.Dataset = image_dataset_from_directory(content_image_dir / subset, shapes['content'], **kwargs)
+        style_dataset: tf.data.Dataset = image_dataset_from_directory(style_image_dir / subset, shapes['style'], **kwargs)
+        return pair_up_content_and_style_datasets(content_dataset, style_dataset, shapes)
 
     training_dataset = _create_content_and_style_dataset('training')
     validation_dataset = _create_content_and_style_dataset('validation')
@@ -86,6 +129,6 @@ def load_content_and_style_dataset_from_paths(content_image_dir, style_image_dir
 
 
 def get_single_sample_from_dataset(dataset: tf.data.Dataset):
-    for datapoint in dataset.shuffle(buffer_size=100, seed=3780).unbatch().batch(1):
+    for datapoint in dataset.unbatch().batch(1):
         return datapoint
     return None

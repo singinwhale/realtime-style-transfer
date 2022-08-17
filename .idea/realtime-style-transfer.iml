@@ -4,8 +4,9 @@
     <content url="file://$MODULE_DIR$">
       <excludeFolder url="file://$MODULE_DIR$/data" />
       <excludeFolder url="file://$MODULE_DIR$/logs" />
+      <excludeFolder url="file://$MODULE_DIR$/cache" />
     </content>
-    <orderEntry type="jdk" jdkName="Python 3.10 (realtime-style-transfer)" jdkType="Python SDK" />
+    <orderEntry type="jdk" jdkName="Python 3.9 (realtime-style-transfer)" jdkType="Python SDK" />
     <orderEntry type="sourceFolder" forTests="false" />
   </component>
   <component name="PyDocumentationSettings">

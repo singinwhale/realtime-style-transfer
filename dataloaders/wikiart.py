@@ -1,16 +1,20 @@
+import math
+import random
 import shutil
 import typing
 import unittest
 from pathlib import Path
+import csv
 from . import common
 import logging
+import hashlib
 
 log = logging.getLogger(__name__)
 
 content_target_dir = Path(__file__).parent.parent.absolute() / "data" / "screenshots"
 style_target_dir = Path(__file__).parent.parent.absolute() / "data" / "wikiart"
 style_image_dir = style_target_dir / 'images'
-content_image_dir = style_target_dir / 'images'
+content_image_dir = content_target_dir / 'images'
 style_debug_image_dir = style_target_dir / 'debug_images'
 content_debug_image_dir = content_target_dir / 'debug_images'
 manifest_filepath = style_target_dir / 'wikiart_scraped.csv'
@@ -64,9 +68,7 @@ async def download_images_async(progress_hook: typing.Callable[[str, Path, int, 
         ```
     :return: None
     """
-    import csv
     import httpx
-    import hashlib
 
     import asyncio
 
@@ -93,8 +95,7 @@ async def download_images_async(progress_hook: typing.Callable[[str, Path, int, 
                     self.total = self.queue.qsize()
 
         async def consume_manifest(self, image_manifest):
-            image_file_basename = hashlib.sha1(str(image_manifest).encode('utf-8'), usedforsecurity=False).hexdigest()
-            image_target_path = (style_image_dir / image_file_basename).with_suffix('.jpg')
+            image_target_path = image_manifest_to_filepath(image_manifest)
             image_url = image_manifest['Link']
 
             if progress_hook is not None:
@@ -146,11 +147,39 @@ def download_images():
 import tensorflow as tf
 
 
-def get_dataset(shapes) -> (tf.data.Dataset, tf.data.Dataset):
+def get_dataset(shapes, batch_size, **kwargs) -> (tf.data.Dataset, tf.data.Dataset):
     log.info("Loading WikiArt dataset...")
     init_dataset()
 
-    return common.load_content_and_style_dataset_from_paths(style_image_dir, shapes)
+    filepaths = sorted(map(lambda image_manifest: image_manifest_to_filepath(image_manifest), _read_dataset_manifest()))
+    if 'seed' in kwargs:
+        rng = random.Random(x=kwargs['seed'])
+        rng.shuffle(filepaths)
+
+    validation_split_index = math.floor(len(filepaths) * 0.8)
+    shape_without_batches = {key: shape[1:] for key, shape in shapes.items()}
+
+    training_style_dataset = common.image_dataset_from_filepaths(filepaths[:validation_split_index], shape_without_batches['style'])
+    validation_style_dataset = common.image_dataset_from_filepaths(filepaths[:validation_split_index], shape_without_batches['style'])
+
+    training_content_dataset, validation_content_dataset = \
+        common.load_training_and_validation_dataset_from_directory(content_image_dir, shape_without_batches['content'], **kwargs)
+
+    # repeat the shorter dataset so the entire wikiart dataset is used
+    training_content_dataset, validation_content_dataset = training_content_dataset.repeat(), validation_content_dataset.repeat()
+
+    training_dataset = common.pair_up_content_and_style_datasets(content_dataset=training_content_dataset,
+                                                                 style_dataset=training_style_dataset,
+                                                                 shapes=shape_without_batches)
+    validation_dataset = common.pair_up_content_and_style_datasets(content_dataset=validation_content_dataset,
+                                                                   style_dataset=validation_style_dataset,
+                                                                   shapes=shape_without_batches)
+
+    if shapes['content'][0] is None:
+        training_dataset = training_dataset.batch(batch_size)
+        validation_dataset = validation_dataset.batch(batch_size)
+
+    return training_dataset, validation_dataset
 
 
 def init_dataset():
@@ -161,7 +190,7 @@ def init_dataset():
             download_images()
 
 
-def get_dataset_debug(shapes, batch_size=1) -> (tf.data.Dataset, tf.data.Dataset):
+def get_dataset_debug(shapes, batch_size=1, **kwargs) -> (tf.data.Dataset, tf.data.Dataset):
     log.info("Loading Debug WikiArt dataset...")
     init_dataset()
     training_dir = style_debug_image_dir / "training"
@@ -185,13 +214,30 @@ def get_dataset_debug(shapes, batch_size=1) -> (tf.data.Dataset, tf.data.Dataset
         training_dataset, validation_dataset = \
             common.load_content_and_style_dataset_from_paths(content_debug_image_dir,
                                                              style_debug_image_dir,
-                                                             {key: shape[1:] for key, shape in shapes.items()})
+                                                             {key: shape[1:] for key, shape in shapes.items()},
+                                                             **kwargs)
         training_dataset = training_dataset.batch(batch_size)
         validation_dataset = validation_dataset.batch(batch_size)
     else:
         training_dataset, validation_dataset = common.load_content_and_style_dataset_from_paths(content_debug_image_dir,
                                                                                                 style_debug_image_dir,
-                                                                                                shapes)
+                                                                                                shapes,
+                                                                                                **kwargs)
+    if "cache_dir" in kwargs:
+        training_dataset = training_dataset.cache(filename=str(Path(kwargs["cache_dir"]) / "training_dataset"))
+        validation_dataset = validation_dataset.cache(filename=str(Path(kwargs["cache_dir"]) / "validation_dataset"))
 
-    training_dataset, validation_dataset = training_dataset.cache(), validation_dataset.cache()
     return training_dataset, validation_dataset
+
+
+def _read_dataset_manifest():
+    with open(manifest_filepath, "r", encoding='utf-8') as manifest_file:
+        manifest_csv_reader = csv.DictReader(manifest_file)
+        for image_manifest in manifest_csv_reader:
+            yield image_manifest
+
+
+def image_manifest_to_filepath(image_manifest):
+    image_file_basename = hashlib.sha1(str(image_manifest).encode('utf-8'), usedforsecurity=False).hexdigest()
+    image_target_path = (style_image_dir / image_file_basename).with_suffix('.jpg')
+    return image_target_path

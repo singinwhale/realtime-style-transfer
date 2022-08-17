@@ -6,43 +6,6 @@ import logging
 log = logging.getLogger(__name__)
 
 
-def vgg_layers(layer_names):
-    """#### Intermediate layers for style and content
-
-    So why do these intermediate outputs within our pretrained image classification network allow us to define style and content representations?
-
-    At a high level, in order for a network to perform image classification (which this network has been trained to do),
-     it must understand the image. This requires taking the raw image as input pixels and building an internal representation
-     that converts the raw image pixels into a complex understanding of the features present within the image.
-
-    This is also a reason why convolutional neural networks are able to generalize well:
-    they’re able to capture the invariances and defining features within classes (e.g. cats vs. dogs)
-    that are agnostic to background noise and other nuisances.
-    Thus, somewhere between where the raw image is fed into the model and the output classification label,
-    the model serves as a complex feature extractor. By accessing intermediate layers of the model,
-    you're able to describe the content and style of input images.
-
-    ## Build the model
-
-    The networks in `tf.keras.applications` are designed so you can easily extract the intermediate layer values using the Keras functional API.
-
-    To define a model using the functional API, specify the inputs and outputs:
-
-    `model = Model(inputs, outputs)`
-
-    This following function builds a VGG19 model that returns a list of intermediate layer outputs:
-    Creates a VGG model that returns a list of intermediate output values.
-    """
-    # Load our model. Load pretrained VGG, trained on ImageNet data
-    vgg = tf.keras.applications.VGG19(include_top=False, weights='imagenet')
-    vgg.trainable = False
-
-    outputs = [vgg.get_layer(name).output for name in layer_names]
-
-    model = tf.keras.Model([vgg.input], outputs)
-    return model
-
-
 def gram_matrix(input_tensor):
     """## Calculate style
 
@@ -60,28 +23,6 @@ def gram_matrix(input_tensor):
     input_shape = tf.shape(input_tensor)
     num_locations = tf.cast(input_shape[1] * input_shape[2], tf.float32)
     return result / (num_locations)
-
-
-def style_content_loss(outputs, num_style_layers, style_targets, content_targets):
-    """To optimize this, use a weighted combination of the two losses to get the total loss"""
-    style_weight = 1e4
-    content_weight = 1e-2
-
-    style_outputs = outputs['style']
-    content_outputs = outputs['content']
-    per_layer_style_losses = [tf.reduce_mean((style_outputs[name] - style_targets[name]) ** 2) for name in
-                              style_outputs.keys()]
-
-    style_loss = tf.add_n(per_layer_style_losses)
-    style_loss *= style_weight / num_style_layers
-
-    per_layer_content_losses = [tf.reduce_mean((content_outputs[name] - content_targets[name]) ** 2) for name in
-                                content_outputs.keys()]
-
-    content_loss = tf.add_n(per_layer_content_losses)
-    content_loss *= content_weight / num_style_layers
-    loss = style_loss + content_loss
-    return loss
 
 
 class StyleLossModelBase(tf.keras.models.Model):
@@ -111,20 +52,28 @@ class StyleLossModelVGG(StyleLossModelBase):
     def __init__(self):
         super(StyleLossModelVGG, self).__init__(name='StyleLossModelVGG')
 
-        content_layers = ['block5_conv2']
-        style_layers = ['block1_conv1', 'block2_conv1', 'block3_conv1', 'block4_conv1', 'block5_conv1']
+        content_layers = ['block5_pool']
+        # style_layers = ['block1_conv1', 'block2_conv1', 'block3_conv1', 'block4_conv1', 'block5_conv1']
+        style_layers = ['block1_pool', 'block2_pool', 'block3_pool', 'block4_pool']
 
-        self.vgg = vgg_layers(style_layers + content_layers)
-        self.vgg.trainable = False
+        # Load our model. Load pretrained VGG, trained on ImageNet data
+        vgg = tf.keras.applications.VGG16(include_top=False, weights='imagenet')
+        vgg.trainable = False
+
+        outputs = [vgg.get_layer(name).output for name in (content_layers + style_layers)]
+
+        self.feature_extractor = tf.keras.Model([vgg.input], outputs)
+        self.feature_extractor.trainable = False
 
         self.style_layers = style_layers
         self.content_layers = content_layers
         self.num_style_layers = len(style_layers)
+        self.content_loss_factor = 1e-4
+        self.style_loss_factor = 1e-6
 
     def call(self, inputs):
-        "Expects float input in [0,1]"
         inputs = inputs * 255.0
-        preprocessed_input = tf.keras.applications.vgg19.preprocess_input(inputs)
+        preprocessed_input = tf.keras.applications.vgg16.preprocess_input(inputs)
         return super(StyleLossModelVGG, self).call(preprocessed_input)
 
 
@@ -178,10 +127,10 @@ class StyleLossModelMobileNet(StyleLossModelBase):
             'expanded_conv_2/Add',
             'expanded_conv_4/Add',
             'expanded_conv_5/Add',
-        ]
-        content_layer_names = [
             'expanded_conv_7/Add',
             'expanded_conv_9/Add',
+        ]
+        content_layer_names = [
             'expanded_conv_10/Add',
         ]
         output_layer_names = style_layer_names + content_layer_names
@@ -198,6 +147,8 @@ class StyleLossModelMobileNet(StyleLossModelBase):
         self.style_layers = style_layer_names
         self.content_layers = content_layer_names
         self.num_style_layers = len(style_layer_names)
+        self.content_loss_factor = 1e-2
+        self.style_loss_factor = 1e-1
 
     def call(self, inputs):
         """Expects float input in [0,1]"""
@@ -208,28 +159,25 @@ class StyleLossModelMobileNet(StyleLossModelBase):
 def style_loss(loss_model: keras.Model, x: tf.Tensor, y_pred: tf.Tensor):
     # perform feature extraction on the input content image and diff it against the output features
     input_content, input_style = x['content'], x['style']
-    loss_data_input = loss_model(input_content)
+    loss_data_content = loss_model(input_content)
+    loss_data_style = loss_model(input_style)
     loss_data_prediction = loss_model(y_pred)
-    input_feature_values: tf.Tensor = loss_data_input['content']
-    input_style_features: tf.Tensor = loss_data_input['style']
+    input_feature_values: tf.Tensor = loss_data_content['content']
+    input_style_features: tf.Tensor = loss_data_style['style']
     output_feature_values: tf.Tensor = loss_data_prediction['content']
     output_style_features: tf.Tensor = loss_data_prediction['style']
 
-    feature_loss = sum([tf.nn.l2_loss(out_value - in_value) for (input_layer, in_value), (out_layer, out_value) in
-                        zip(input_feature_values.items(), output_feature_values.items())])
+    feature_loss = tf.reduce_mean([tf.nn.l2_loss((out_value - in_value) * loss_model.content_loss_factor) for (input_layer, in_value), (out_layer, out_value) in
+                                   zip(input_feature_values.items(), output_feature_values.items())])
 
-    style_loss = sum([tf.nn.l2_loss(gram_matrix(out_value) - gram_matrix(in_value)) for
-                      (input_layer, in_value), (out_layer, out_value) in
-                      zip(input_style_features.items(), output_style_features.items())])
+    style_loss = tf.reduce_mean([tf.nn.l2_loss((gram_matrix(out_value) - gram_matrix(in_value)) * loss_model.style_loss_factor) for
+                                 (input_layer, in_value), (out_layer, out_value) in
+                                 zip(input_style_features.items(), output_style_features.items())])
 
-    input_style_gram_value = gram_matrix(input_style)
-    output_gram_value = gram_matrix(y_pred)
-    gram_loss = tf.nn.l2_loss(output_gram_value - input_style_gram_value)
-    ssim_loss = tf.nn.l2_loss(tf.image.ssim_multiscale(y_pred, input_content, max_val=1))
+    # ssim_loss = tf.nn.l2_loss(tf.image.ssim_multiscale(y_pred, input_content, max_val=1))
     return {
-        "loss": feature_loss + gram_loss + style_loss + ssim_loss,
+        "loss": feature_loss + style_loss,  # + ssim_loss,
         "feature_loss": feature_loss,
-        "gram_loss": gram_loss,
         "style_loss": style_loss,
-        "ssim_loss": ssim_loss,
+        # "ssim_loss": ssim_loss,
     }

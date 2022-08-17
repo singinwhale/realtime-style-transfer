@@ -5,6 +5,7 @@ from tensorflow import keras
 
 
 class SummaryImageCallback(keras.callbacks.Callback):
+    model: tf.keras.models.Model
 
     def __init__(self, validation_datapoint, training_datapoint):
         self.validation_datapoint = validation_datapoint

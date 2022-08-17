@@ -35,10 +35,10 @@ def expand(filters, size, strides, name, apply_dropout=False) -> tf.keras.Sequen
 
     result = tf.keras.Sequential(name=name)
     result.add(
-        tf.keras.layers.Conv2D(filters, size, strides=strides,
-                               padding='same',
-                               kernel_initializer=initializer,
-                               use_bias=False, name=f"{name}_conv"))
+        tf.keras.layers.Conv2DTranspose(filters=filters, kernel_size=size, strides=strides,
+                                        padding='same',
+                                        kernel_initializer=initializer,
+                                        use_bias=False, name=f"{name}_conv"))
 
     result.add(ConditionalInstanceNormalization(filters))
 
@@ -111,7 +111,7 @@ class StyleTransferModel(tf.keras.Model):
             contract(128, 3, 2, name="2"),
         ], name="encoder")
 
-        res_input_shape = (input_shape['content'][1], input_shape['content'][2], 128)
+        res_input_shape = (input_shape['content'][1] // 4, input_shape['content'][2] // 4, 128)
         log.debug(f"res_input_shape: {res_input_shape}")
         self.bottleneck = tf.keras.Sequential(layers=[
             residual_block(res_input_shape, 128, 3, 1, name="0"),
@@ -127,7 +127,7 @@ class StyleTransferModel(tf.keras.Model):
         ]
 
         self.top = tf.keras.Sequential(layers=[
-            tf.keras.layers.Conv2D(filters=3, kernel_size=9, strides=1, padding='same'),  # -> (1, 480, 960, 3)
+            tf.keras.layers.Conv2DTranspose(filters=3, kernel_size=1, strides=1, padding='same'),  # -> (1, 480, 960, 3)
         ], name="Top")
 
         potential_layers = self.encoder.layers + [layer for decoder in self.decoder_layers for layer in decoder.layers]
@@ -153,19 +153,17 @@ class StyleTransferModel(tf.keras.Model):
             normalization_layer.offset = offset
 
         x = self.encoder(content_input)
-        log.debug(f"bottleneck input_shape: {x.shape}")
         x = self.bottleneck(x)
         for decoder_layer in self.decoder_layers:
             x = decoder_layer(x)
 
         x = self.top(x)
         x = tf.nn.sigmoid(x)
-
         losses = self.style_loss(inputs, x)
         self.add_loss(losses['loss'])
-        self.add_metric(value=losses['feature_loss'], name="feature_loss")
-        self.add_metric(value=losses['gram_loss'], name="gram_loss")
-        self.add_metric(value=losses['style_loss'], name="style_loss")
-        self.add_metric(value=losses['ssim_loss'], name="ssim_loss")
+        for loss_name, loss_value in losses.items():
+            if loss_name == "loss":
+                continue
+            self.add_metric(value=loss_value, name=loss_name)
 
         return x

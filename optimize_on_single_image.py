@@ -8,7 +8,7 @@
 import os
 import tensorflow as tf
 
-from models.styleLoss import StyleLossModelVGG, StyleLossModelEfficientNet, style_content_loss
+from models.styleLoss import StyleLossModelVGG, StyleLossModelEfficientNet
 
 import matplotlib.pyplot as plt
 import matplotlib as mpl
@@ -78,6 +78,27 @@ Choose a weight for the `total_variation_loss`:
 """
 
 total_variation_weight = 30
+
+def style_content_loss(outputs, num_style_layers, style_targets, content_targets):
+    """To optimize this, use a weighted combination of the two losses to get the total loss"""
+    style_weight = 1e4
+    content_weight = 1e-2
+
+    style_outputs = outputs['style']
+    content_outputs = outputs['content']
+    per_layer_style_losses = [tf.reduce_mean((style_outputs[name] - style_targets[name]) ** 2) for name in
+                              style_outputs.keys()]
+
+    style_loss = tf.add_n(per_layer_style_losses)
+    style_loss *= style_weight / num_style_layers
+
+    per_layer_content_losses = [tf.reduce_mean((content_outputs[name] - content_targets[name]) ** 2) for name in
+                                content_outputs.keys()]
+
+    content_loss = tf.add_n(per_layer_content_losses)
+    content_loss *= content_weight / num_style_layers
+    loss = style_loss + content_loss
+    return loss
 
 """Now include it in the `train_step` function:"""
 
