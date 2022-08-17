@@ -5,6 +5,9 @@ import typing
 import unittest
 from pathlib import Path
 import csv
+
+import tqdm
+
 from . import common
 import logging
 import hashlib
@@ -160,13 +163,10 @@ def get_dataset(shapes, batch_size, **kwargs) -> (tf.data.Dataset, tf.data.Datas
     shape_without_batches = {key: shape[1:] for key, shape in shapes.items()}
 
     training_style_dataset = common.image_dataset_from_filepaths(filepaths[:validation_split_index], shape_without_batches['style'])
-    validation_style_dataset = common.image_dataset_from_filepaths(filepaths[:validation_split_index], shape_without_batches['style'])
+    validation_style_dataset = common.image_dataset_from_filepaths(filepaths[validation_split_index:], shape_without_batches['style'])
 
     training_content_dataset, validation_content_dataset = \
         common.load_training_and_validation_dataset_from_directory(content_image_dir, shape_without_batches['content'], **kwargs)
-
-    # repeat the shorter dataset so the entire wikiart dataset is used
-    training_content_dataset, validation_content_dataset = training_content_dataset.repeat(), validation_content_dataset.repeat()
 
     training_dataset = common.pair_up_content_and_style_datasets(content_dataset=training_content_dataset,
                                                                  style_dataset=training_style_dataset,
@@ -178,6 +178,15 @@ def get_dataset(shapes, batch_size, **kwargs) -> (tf.data.Dataset, tf.data.Datas
     if shapes['content'][0] is None:
         training_dataset = training_dataset.batch(batch_size)
         validation_dataset = validation_dataset.batch(batch_size)
+
+    if 'cache_dir' in kwargs:
+        cache_dir = kwargs['cache_dir']
+        training_dataset, validation_dataset = training_dataset.cache(filename=str(cache_dir / "wikiart_training_dataset")), validation_dataset.cache(filename=str(cache_dir / "wikiart_validation_dataset"))
+        log.info(f"Caching datasets into {cache_dir}. This could take a while")
+        for name, dataset in {"training_dataset": training_dataset, "validation_dataset": validation_dataset}.items():
+            # immediately cache everything
+            for _ in tqdm.tqdm(iterable=dataset, desc=name):
+                pass
 
     return training_dataset, validation_dataset
 
@@ -224,8 +233,14 @@ def get_dataset_debug(shapes, batch_size=1, **kwargs) -> (tf.data.Dataset, tf.da
                                                                                                 shapes,
                                                                                                 **kwargs)
     if "cache_dir" in kwargs:
-        training_dataset = training_dataset.cache(filename=str(Path(kwargs["cache_dir"]) / "training_dataset"))
-        validation_dataset = validation_dataset.cache(filename=str(Path(kwargs["cache_dir"]) / "validation_dataset"))
+        cache_dir = kwargs["cache_dir"]
+        training_dataset = training_dataset.cache(filename=str(Path(cache_dir) / "debug_training_dataset"))
+        validation_dataset = validation_dataset.cache(filename=str(Path(cache_dir) / "debug_validation_dataset"))
+        log.info(f"Caching datasets into {cache_dir}. This could take a while")
+        for name, dataset in {"training_dataset": training_dataset, "validation_dataset": validation_dataset}.items():
+            # immediately cache everything
+            for _ in tqdm.tqdm(iterable=dataset, desc=name):
+                pass
 
     return training_dataset, validation_dataset
 
