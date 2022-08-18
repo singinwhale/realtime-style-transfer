@@ -75,8 +75,8 @@ async def download_images_async(progress_hook: typing.Callable[[str, Path, int, 
 
     import asyncio
 
-    httpx_log = logging.getLogger('httpx._client')
-    httpx_log.setLevel(logging.INFO)
+    httpx_log = tracing.getLogger('httpx._client')
+    httpx_log.setLevel(tracing.INFO)
 
     if not style_image_dir.exists():
         import os

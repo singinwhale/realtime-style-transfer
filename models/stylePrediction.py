@@ -21,6 +21,7 @@ class StylePredictionModelBase(tf.keras.Model):
         super(StylePredictionModelBase, self).__init__(name=name)
 
         self.dropout_rate = dropout_rate
+        log.info(f"Using {num_style_parameters} style parameters")
         self.style_predictor = tf.keras.layers.Dense(
             num_style_parameters,
             activation=tf.keras.activations.softmax,
@@ -28,7 +29,7 @@ class StylePredictionModelBase(tf.keras.Model):
             bias_initializer=tf.constant_initializer(1),
             name="style_predictor")
 
-        num_norm_parameters = sum([norm.num_feature_maps for norm in norm_layers])
+        num_norm_parameters = sum([norm.num_feature_maps for norm in norm_layers]) * 2
         log.debug(f"Using {num_norm_parameters} norm parameters")
         self.style_norm_predictor = tf.keras.layers.Dense(
             num_norm_parameters,

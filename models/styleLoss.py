@@ -155,29 +155,31 @@ class StyleLossModelMobileNet(StyleLossModelBase):
         inputs = inputs * 255.0
         return super(StyleLossModelMobileNet, self).call(inputs)
 
+def make_style_loss_function(loss_model: keras.Model):
+    def compute_loss(x: tf.Tensor, y_pred: tf.Tensor):
+        # perform feature extraction on the input content image and diff it against the output features
+        input_content, input_style = x['content'], x['style']
+        loss_data_content = loss_model(input_content)
+        loss_data_style = loss_model(input_style)
+        loss_data_prediction = loss_model(y_pred)
+        input_feature_values: tf.Tensor = loss_data_content['content']
+        input_style_features: tf.Tensor = loss_data_style['style']
+        output_feature_values: tf.Tensor = loss_data_prediction['content']
+        output_style_features: tf.Tensor = loss_data_prediction['style']
 
-def style_loss(loss_model: keras.Model, x: tf.Tensor, y_pred: tf.Tensor):
-    # perform feature extraction on the input content image and diff it against the output features
-    input_content, input_style = x['content'], x['style']
-    loss_data_content = loss_model(input_content)
-    loss_data_style = loss_model(input_style)
-    loss_data_prediction = loss_model(y_pred)
-    input_feature_values: tf.Tensor = loss_data_content['content']
-    input_style_features: tf.Tensor = loss_data_style['style']
-    output_feature_values: tf.Tensor = loss_data_prediction['content']
-    output_style_features: tf.Tensor = loss_data_prediction['style']
+        feature_loss = tf.reduce_mean([tf.nn.l2_loss((out_value - in_value) * loss_model.content_loss_factor) for (input_layer, in_value), (out_layer, out_value) in
+                                       zip(input_feature_values.items(), output_feature_values.items())])
 
-    feature_loss = tf.reduce_mean([tf.nn.l2_loss((out_value - in_value) * loss_model.content_loss_factor) for (input_layer, in_value), (out_layer, out_value) in
-                                   zip(input_feature_values.items(), output_feature_values.items())])
+        style_loss = tf.reduce_mean([tf.nn.l2_loss((gram_matrix(out_value) - gram_matrix(in_value)) * loss_model.style_loss_factor) for
+                                     (input_layer, in_value), (out_layer, out_value) in
+                                     zip(input_style_features.items(), output_style_features.items())])
 
-    style_loss = tf.reduce_mean([tf.nn.l2_loss((gram_matrix(out_value) - gram_matrix(in_value)) * loss_model.style_loss_factor) for
-                                 (input_layer, in_value), (out_layer, out_value) in
-                                 zip(input_style_features.items(), output_style_features.items())])
+        # ssim_loss = tf.nn.l2_loss(tf.image.ssim_multiscale(y_pred, input_content, max_val=1))
+        return {
+            "loss": feature_loss + style_loss,  # + ssim_loss,
+            "feature_loss": feature_loss,
+            "style_loss": style_loss,
+            # "ssim_loss": ssim_loss,
+        }
 
-    # ssim_loss = tf.nn.l2_loss(tf.image.ssim_multiscale(y_pred, input_content, max_val=1))
-    return {
-        "loss": feature_loss + style_loss,  # + ssim_loss,
-        "feature_loss": feature_loss,
-        "style_loss": style_loss,
-        # "ssim_loss": ssim_loss,
-    }
+    return compute_loss

@@ -14,7 +14,7 @@ def imshow(image, title=None):
         plt.title(title)
 
 
-def predict_datapoint(validation_log_datapoint, training_log_datapoint, model):
+def predict_datapoint(validation_log_datapoint, training_log_datapoint, model: tf.keras.Model, callbacks=None):
     fig, subplots = plt.subplots(2, 2, sharex=True, sharey=True, dpi=600)
 
     for plot, name in zip(subplots.flatten(), ("content", "style", "validation_prediction", "training_prediction")):
@@ -24,7 +24,7 @@ def predict_datapoint(validation_log_datapoint, training_log_datapoint, model):
     content_plot, style_plot, valiation_prediction_plot, training_prediction_plot = subplots.flatten()
     content_plot.imshow(tf.squeeze(validation_log_datapoint['content']))
     style_plot.imshow(tf.squeeze(validation_log_datapoint['style']))
-    valiation_prediction_plot.imshow(tf.squeeze(model(validation_log_datapoint)))
-    training_prediction_plot.imshow(tf.squeeze(model(training_log_datapoint)))
+    valiation_prediction_plot.imshow(tf.squeeze(model.predict(validation_log_datapoint, callbacks=callbacks)))
+    training_prediction_plot.imshow(tf.squeeze(model.predict(training_log_datapoint, callbacks=callbacks)))
 
     plt.show()

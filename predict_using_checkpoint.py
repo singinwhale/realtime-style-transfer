@@ -1,7 +1,3 @@
-import logsetup
-
-import datetime
-import os
 from pathlib import Path
 import tensorflow as tf
 import logging
@@ -41,11 +37,11 @@ input_shape = {'content': image_shape, 'style': image_shape}
 output_shape = image_shape
 
 style_loss_model = styleLoss.StyleLossModelMobileNet(output_shape)
-style_transfer_model = styleTransfer.StyleTransferModel(
+style_transfer_model = styleTransfer.StyleTransferModelFunctional(
     input_shape,
     lambda batchnorm_layers: stylePrediction.StylePredictionModelMobileNet(
         input_shape, batchnorm_layers),
-    lambda x, y_pred: styleLoss.style_loss(style_loss_model, x, y_pred)
+    lambda: styleLoss.make_style_loss_function(style_loss_model)
 )
 element = datapoint.get_single_element()
 
