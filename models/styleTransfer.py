@@ -89,7 +89,7 @@ def contract(filters, size, strides, name, apply_dropout=False) -> tf.keras.Sequ
 class StyleTransferModel(tf.keras.Model):
 
     def __init__(self, input_shape,
-                 style_predictor_factory_func: typing.Callable[[typing.List[tf.keras.layers.Layer]], tf.keras.Model],
+                 style_predictor_factory_func: typing.Callable[[int], tf.keras.Model],
                  style_loss_func_factory_func: typing.Callable,
                  name="StyleTransferModel"):
         """Modified u-net generator model (https://arxiv.org/abs/1611.07004).
@@ -138,8 +138,7 @@ class StyleTransferModel(tf.keras.Model):
         ]
         self.decoder = tf.keras.Sequential(layers=self.decoder_layers, name="decoder")
 
-        self.style_predictor = self.style_predictor_factory_func(self.get_normalization_layers())
-
+        self.style_predictor = self.style_predictor_factory_func(sum(map(lambda layer: layer.num_feature_maps * 2, self.get_normalization_layers())))
 
     def call(self, inputs, training=None, mask=None):
         content_input, style_input = (inputs['content'], inputs['style'])
@@ -158,7 +157,7 @@ class StyleTransferModel(tf.keras.Model):
             if loss_name == "loss":
                 continue
             self.add_metric(value=loss_value, name=loss_name)
-
+        log.debug(f"type of output {x} is: {type(x)}")
         return x
 
     def get_normalization_layers(self) -> typing.List[ConditionalInstanceNormalization]:

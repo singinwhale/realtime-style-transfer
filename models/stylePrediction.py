@@ -17,7 +17,7 @@ DENSE_KERNEL_INITIALIZER = {
 class StylePredictionModelBase(tf.keras.Model):
     feature_extractor = None
 
-    def __init__(self, norm_layers, num_style_parameters=100, dropout_rate=0.2, name="StylePredictionModel"):
+    def __init__(self, num_top_parameters, num_style_parameters=100, dropout_rate=0.2, name="StylePredictionModel"):
         super(StylePredictionModelBase, self).__init__(name=name)
 
         self.dropout_rate = dropout_rate
@@ -29,7 +29,7 @@ class StylePredictionModelBase(tf.keras.Model):
             bias_initializer=tf.constant_initializer(1),
             name="style_predictor")
 
-        num_norm_parameters = sum([norm.num_feature_maps for norm in norm_layers]) * 2
+        num_norm_parameters = num_top_parameters
         log.debug(f"Using {num_norm_parameters} norm parameters")
         self.style_norm_predictor = tf.keras.layers.Dense(
             num_norm_parameters,
@@ -52,8 +52,8 @@ class StylePredictionModelBase(tf.keras.Model):
 
 class StylePredictionModelEfficientNet(StylePredictionModelBase):
 
-    def __init__(self, input_shape, norm_layers, dropout_rate=0.2, name="StylePredictionModelEfficientNet"):
-        super(StylePredictionModelEfficientNet, self).__init__(norm_layers, dropout_rate=dropout_rate, name=name)
+    def __init__(self, input_shape, num_top_parameters, dropout_rate=0.2, name="StylePredictionModelEfficientNet"):
+        super(StylePredictionModelEfficientNet, self).__init__(num_top_parameters, dropout_rate=dropout_rate, name=name)
         self.feature_extractor = \
             tf.keras.applications.efficientnet_v2.EfficientNetV2S(include_top=False,
                                                                   input_shape=input_shape['style'][-3:])
@@ -62,8 +62,8 @@ class StylePredictionModelEfficientNet(StylePredictionModelBase):
 
 class StylePredictionModelMobileNet(StylePredictionModelBase):
 
-    def __init__(self, input_shape, norm_layers, dropout_rate=0.2, name="StylePredictionModel"):
-        super(StylePredictionModelMobileNet, self).__init__(norm_layers, dropout_rate=dropout_rate, name=name)
+    def __init__(self, input_shape, num_top_parameters, dropout_rate=0.2, name="StylePredictionModel"):
+        super(StylePredictionModelMobileNet, self).__init__(num_top_parameters, dropout_rate=dropout_rate, name=name)
         self.feature_extractor = \
             tf.keras.applications.MobileNetV3Small(include_top=False,
                                                    input_shape=input_shape['style'][-3:])
