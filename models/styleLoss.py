@@ -27,12 +27,13 @@ def gram_matrix(input_tensor):
 
 class StyleLossModelBase(tf.keras.models.Model):
     num_style_layers: int = None
+    feature_extractor: tf.keras.Model
 
     def __init__(self, *args, **kwargs):
         super(StyleLossModelBase, self).__init__(*args, **kwargs)
         self.trainable = False
 
-    def call(self, inputs):
+    def call(self, inputs, **kwargs):
         outputs = self.feature_extractor(inputs)
         style_outputs, content_outputs = (outputs[:self.num_style_layers], outputs[self.num_style_layers:])
 
@@ -71,10 +72,10 @@ class StyleLossModelVGG(StyleLossModelBase):
         self.content_loss_factor = 1e-4
         self.style_loss_factor = 1e-6
 
-    def call(self, inputs):
+    def call(self, inputs, **kwargs):
         inputs = inputs * 255.0
         preprocessed_input = tf.keras.applications.vgg16.preprocess_input(inputs)
-        return super(StyleLossModelVGG, self).call(preprocessed_input)
+        return super().call(preprocessed_input, **kwargs)
 
 
 class StyleLossModelEfficientNet(StyleLossModelBase):
@@ -112,10 +113,12 @@ class StyleLossModelEfficientNet(StyleLossModelBase):
         self.content_layers = content_layer_names
         self.num_style_layers = len(style_layer_names)
 
-    def call(self, inputs):
-        """Expects float input in [0,1]"""
+    def call(self, inputs, **kwargs):
+        """Expects float input in [0,1]
+        :param **kwargs:
+        """
         inputs = inputs * 255.0
-        return super(StyleLossModelEfficientNet, self).call(inputs)
+        return super().call(inputs, **kwargs)
 
 
 class StyleLossModelMobileNet(StyleLossModelBase):
@@ -150,8 +153,9 @@ class StyleLossModelMobileNet(StyleLossModelBase):
         self.content_loss_factor = 1e-2
         self.style_loss_factor = 1e-1
 
-    def call(self, inputs):
-        """Expects float input in [0,1]"""
+    def call(self, inputs, **kwargs):
+        """Expects float input in [0,1]
+        """
         inputs = inputs * 255.0
         return super(StyleLossModelMobileNet, self).call(inputs)
 
@@ -174,12 +178,10 @@ def make_style_loss_function(loss_model: keras.Model):
                                      (input_layer, in_value), (out_layer, out_value) in
                                      zip(input_style_features.items(), output_style_features.items())])
 
-        # ssim_loss = tf.nn.l2_loss(tf.image.ssim_multiscale(y_pred, input_content, max_val=1))
         return {
-            "loss": feature_loss + style_loss,  # + ssim_loss,
+            "loss": feature_loss + style_loss,
             "feature_loss": feature_loss,
             "style_loss": style_loss,
-            # "ssim_loss": ssim_loss,
         }
 
     return compute_loss

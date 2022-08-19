@@ -10,28 +10,23 @@ log = logging.getLogger(__name__)
 class ConditionalInstanceNormalization(tf.keras.layers.Layer):
     """Instance Normalization Layer (https://arxiv.org/abs/1607.08022)."""
 
-    def __init__(self, num_feature_maps, scale: tf.Tensor, offset: tf.Tensor, epsilon=1e-5):
+    def __init__(self, num_feature_maps, epsilon=1e-5):
         super(ConditionalInstanceNormalization, self).__init__(name="ConditionalInstanceNormalization")
         self.epsilon = epsilon
-        # self.scale = tf.Variable(tf.ones((1, 1, 1, num_feature_maps)), name="scale")
-        # self.offset = tf.Variable(tf.zeros((1, 1, 1, num_feature_maps)), name="offset")
-        self.scale = scale
-        self.offset = offset
         self.num_feature_maps = num_feature_maps
 
     def call(self, x):
-        assert x.shape[-1] == self.num_feature_maps
+        inputs = x
+        x = inputs['inputs']
+        scale = inputs['scale']
+        bias = inputs['bias']
+
         mean, variance = tf.nn.moments(x, axes=[1, 2], keepdims=True)
         inv = tf.math.rsqrt(variance + self.epsilon)
         normalized = (x - mean) * inv
         x = normalized
 
-        scale = self.scale
-        offset = self.offset
-
-        x = tf.keras.layers.multiply([x, scale])
-        x = tf.keras.layers.add([x, offset])
-
+        x = x * scale + bias
         return x
 
     def get_config(self):
@@ -41,35 +36,46 @@ class ConditionalInstanceNormalization(tf.keras.layers.Layer):
         }
 
 
-def expand(filters, size, strides, scale, offset, name, apply_dropout=False) -> tf.keras.Model:
+def expand(input_shape, filters, size, strides, name, apply_dropout=False) -> tf.keras.Model:
     name = f"expand_{name}"
     initializer = tf.random_normal_initializer(0., 0.02)
 
-    result = tf.keras.Sequential(name=name)
-    result.add(
-        tf.keras.layers.Conv2DTranspose(
-            filters=filters, kernel_size=size, strides=strides, padding='same',
-            kernel_initializer=initializer,
-            use_bias=False,  # todo: investigate why this is False in the magenta project
-            name=f"{name}_conv"))
+    content_inputs = tf.keras.layers.Input(shape=input_shape)
+    scale = tf.keras.layers.Input(shape=(1, 1, filters))
+    bias = tf.keras.layers.Input(shape=(1, 1, filters))
+    inputs = {
+        "inputs": content_inputs,
+        "scale": scale,
+        "bias": bias,
+    }
+    result = tf.keras.layers.Conv2DTranspose(
+        filters=filters, kernel_size=size, strides=strides, padding='same',
+        kernel_initializer=initializer,
+        use_bias=False,  # todo: investigate why this is False in the magenta project
+        name=f"{name}_conv")(content_inputs)
 
-    result.add(ConditionalInstanceNormalization(filters, scale, offset))
+    instance_norm_args = {
+        "inputs": result,
+        "scale": scale,
+        "bias": bias,
+    }
+    result = ConditionalInstanceNormalization(filters)(instance_norm_args)
 
     if apply_dropout:
-        result.add(tf.keras.layers.Dropout(0.5))
+        result = tf.keras.layers.Dropout(0.5)(result)
 
-    result.add(tf.keras.layers.ReLU())
+    result = tf.keras.layers.ReLU()(result)
 
-    return result
+    return tf.keras.Model(inputs, result, name=name)
 
 
 def residual_block(input_shape, filters, size, strides, name, apply_dropout=False) -> tf.keras.Model:
     name = f"residual_block_{name}"
     initializer = tf.random_uniform_initializer(0., 0.05)
     inputs = tf.keras.Input(shape=input_shape)
-    fx = tf.keras.layers.Conv2D(filters, size, strides=strides, activation='relu', padding='same', kernel_initializer=initializer)(inputs)
+    fx = tf.keras.layers.Conv2D(filters, size, name=f"{name}_conv0", strides=strides, activation='relu', padding='same', kernel_initializer=initializer)(inputs)
     fx = tf.keras.layers.BatchNormalization()(fx)
-    fx = tf.keras.layers.Conv2D(filters, size, strides=strides, padding='same', kernel_initializer=initializer)(fx)
+    fx = tf.keras.layers.Conv2D(filters, size, name=f"{name}_conv1", strides=strides, padding='same', kernel_initializer=initializer)(fx)
     out = tf.keras.layers.Add()([inputs, fx])
     out = tf.keras.layers.ReLU()(out)
     out = tf.keras.layers.BatchNormalization()(out)
@@ -86,7 +92,9 @@ def contract(filters, size, strides, name, apply_dropout=False) -> tf.keras.Sequ
                                strides=strides,
                                padding='same',
                                kernel_initializer=initializer,
-                               use_bias=False, name=f"{name}_conv"))
+                               use_bias=False,
+                               name=f"{name}_conv")
+    )
 
     result.add(tf.keras.layers.BatchNormalization())
 
@@ -140,6 +148,7 @@ def StyleTransferModelFunctional(input_shape,
         residual_block(residual_block_input_shape, 128, 3, 1, name="4"),
     ], name="bottleneck")(x)
 
+    input_filters = residual_block_input_shape[-1]
     style_norm_param_lower_bound = 0
     for i, decoder_layer_spec in enumerate(decoder_layer_specs):
         style_norm_scale_upper_bound = style_norm_param_lower_bound + decoder_layer_spec["filters"]
@@ -150,8 +159,17 @@ def StyleTransferModelFunctional(input_shape,
         scale, offset = tf.expand_dims(scale, -2, name="expand_scale_1"), tf.expand_dims(offset, -2, name="expand_offset_1")
         style_norm_param_lower_bound = style_norm_offset_upper_bound
 
-        expand_layer = expand(scale=scale, offset=offset, name=i, **decoder_layer_spec)
-        x = expand_layer(x)
+        input_shape = (residual_block_input_shape[0] * 2 ** i, residual_block_input_shape[1] * 2 ** i, input_filters)
+        expand_layer = expand(input_shape=input_shape, name=i,
+                              filters=decoder_layer_spec["filters"],
+                              size=decoder_layer_spec["size"],
+                              strides=decoder_layer_spec["strides"])
+        x = expand_layer({
+            "inputs": x,
+            "scale": scale,
+            "bias": offset,
+        })
+        input_filters = decoder_layer_spec["filters"]
 
     x = tf.keras.Sequential(layers=[
         tf.keras.layers.Conv2DTranspose(filters=3, kernel_size=1, strides=1, padding='same',
@@ -167,5 +185,4 @@ def StyleTransferModelFunctional(input_shape,
         if loss_name == "loss":
             continue
         model.add_metric(value=loss_value, name=loss_name)
-    model.summary()
     return model
