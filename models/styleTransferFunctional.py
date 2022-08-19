@@ -11,7 +11,7 @@ class ConditionalInstanceNormalization(tf.keras.layers.Layer):
     """Instance Normalization Layer (https://arxiv.org/abs/1607.08022)."""
 
     def __init__(self, num_feature_maps, epsilon=1e-5):
-        super(ConditionalInstanceNormalization, self).__init__(name="ConditionalInstanceNormalization")
+        super().__init__(name="ConditionalInstanceNormalization")
         self.epsilon = epsilon
         self.num_feature_maps = num_feature_maps
 
@@ -104,17 +104,6 @@ def contract(filters, size, strides, name, apply_dropout=False) -> tf.keras.Sequ
     result.add(tf.keras.layers.ReLU())
 
     return result
-
-
-class AssignLayer(tf.keras.layers.Layer):
-
-    def __init__(self, variable, **kwargs):
-        super().__init__(name="AssignLayer", **kwargs)
-        self.variable = variable
-
-    def call(self, inputs, *args, **kwargs):
-        log.debug(f"Assigning to variable {self.variable.name}")
-        self.variable.assign(inputs, name=f"assign_{self.variable.name.replace(':', '')}")
 
 
 def StyleTransferModelFunctional(input_shape,

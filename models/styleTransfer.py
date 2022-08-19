@@ -12,7 +12,7 @@ class ConditionalInstanceNormalization(tf.keras.layers.Layer):
     """Instance Normalization Layer (https://arxiv.org/abs/1607.08022)."""
 
     def __init__(self, num_feature_maps, batch_size, epsilon=1e-5):
-        super(ConditionalInstanceNormalization, self).__init__()
+        super().__init__()
         self.epsilon = epsilon
         self.scale = None
         self.offset = None
@@ -99,7 +99,7 @@ class StyleTransferModel(tf.keras.Model):
         Returns:
           Generator model
         """
-        super(StyleTransferModel, self).__init__(name=name)
+        super().__init__(name=name)
 
         self.style_loss = style_loss_func_factory_func()
 

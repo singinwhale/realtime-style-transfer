@@ -30,7 +30,7 @@ class StyleLossModelBase(tf.keras.models.Model):
     feature_extractor: tf.keras.Model
 
     def __init__(self, *args, **kwargs):
-        super(StyleLossModelBase, self).__init__(*args, **kwargs)
+        super().__init__(*args, **kwargs)
         self.trainable = False
 
     def call(self, inputs, **kwargs):
@@ -51,7 +51,7 @@ class StyleLossModelVGG(StyleLossModelBase):
     """
 
     def __init__(self):
-        super(StyleLossModelVGG, self).__init__(name='StyleLossModelVGG')
+        super().__init__(name='StyleLossModelVGG')
 
         content_layers = ['block5_pool']
         # style_layers = ['block1_conv1', 'block2_conv1', 'block3_conv1', 'block4_conv1', 'block5_conv1']
@@ -85,7 +85,7 @@ class StyleLossModelEfficientNet(StyleLossModelBase):
     """
 
     def __init__(self, input_shape, name="StyleLossModelEfficientNet"):
-        super(StyleLossModelEfficientNet, self).__init__(name=name)
+        super().__init__(name=name)
 
         style_layer_names = [
             'block2c_add',
@@ -124,7 +124,7 @@ class StyleLossModelEfficientNet(StyleLossModelBase):
 class StyleLossModelMobileNet(StyleLossModelBase):
 
     def __init__(self, input_shape, name="StyleLossModelMobileNet"):
-        super(StyleLossModelMobileNet, self).__init__(name=name)
+        super().__init__(name=name)
 
         style_layer_names = [
             'expanded_conv_2/Add',
@@ -157,7 +157,35 @@ class StyleLossModelMobileNet(StyleLossModelBase):
         """Expects float input in [0,1]
         """
         inputs = inputs * 255.0
-        return super(StyleLossModelMobileNet, self).call(inputs)
+        return super().call(inputs)
+
+
+class StyleLossModelDummy(StyleLossModelBase):
+
+    def __init__(self, input_shape, name="StyleLossModelDummy"):
+        super().__init__(name=name)
+
+        inputs = tf.keras.Input(shape=input_shape[1:])
+
+        conv1 = tf.keras.layers.Conv2D(3, 3, 1, padding='same', name="dummy_conv1")
+        output1 = conv1(inputs)
+        conv2 = tf.keras.layers.Conv2D(3, 3, 1, padding='same', name="dummy_conv2")
+        output2 = conv2(output1)
+
+        self.style_layers = [
+            conv1.name
+        ]
+        self.content_layers = [
+            conv2.name
+        ]
+
+        self.feature_extractor = tf.keras.Model(inputs, [output1, output2])
+        self.feature_extractor.trainable = False
+
+        self.num_style_layers = 1
+        self.content_loss_factor = 1
+        self.style_loss_factor = 1
+
 
 def make_style_loss_function(loss_model: keras.Model):
     def compute_loss(x: tf.Tensor, y_pred: tf.Tensor):

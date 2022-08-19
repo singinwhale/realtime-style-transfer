@@ -18,7 +18,7 @@ class StylePredictionModelBase(tf.keras.Model):
     feature_extractor = None
 
     def __init__(self, num_top_parameters, num_style_parameters=100, dropout_rate=0.2, name="StylePredictionModel"):
-        super(StylePredictionModelBase, self).__init__(name=name)
+        super().__init__(name=name)
 
         self.dropout_rate = dropout_rate
         log.info(f"Using {num_style_parameters} style parameters")
@@ -53,7 +53,7 @@ class StylePredictionModelBase(tf.keras.Model):
 class StylePredictionModelEfficientNet(StylePredictionModelBase):
 
     def __init__(self, input_shape, num_top_parameters, dropout_rate=0.2, name="StylePredictionModelEfficientNet"):
-        super(StylePredictionModelEfficientNet, self).__init__(num_top_parameters, dropout_rate=dropout_rate, name=name)
+        super().__init__(num_top_parameters, dropout_rate=dropout_rate, name=name)
         self.feature_extractor = \
             tf.keras.applications.efficientnet_v2.EfficientNetV2S(include_top=False,
                                                                   input_shape=input_shape['style'][-3:])
@@ -63,8 +63,15 @@ class StylePredictionModelEfficientNet(StylePredictionModelBase):
 class StylePredictionModelMobileNet(StylePredictionModelBase):
 
     def __init__(self, input_shape, num_top_parameters, dropout_rate=0.2, name="StylePredictionModel"):
-        super(StylePredictionModelMobileNet, self).__init__(num_top_parameters, dropout_rate=dropout_rate, name=name)
+        super().__init__(num_top_parameters, dropout_rate=dropout_rate, name=name)
         self.feature_extractor = \
             tf.keras.applications.MobileNetV3Small(include_top=False,
-                                                   input_shape=input_shape['style'][-3:])
+                                                   input_shape=input_shape['style'][-3:],)
         self.feature_extractor.trainable = True
+
+
+class StylePredictionModelDummy(StylePredictionModelBase):
+
+    def __init__(self, num_top_parameters, dropout_rate=0.2, name="StylePredictionModel"):
+        super().__init__(num_top_parameters, dropout_rate=dropout_rate, name=name)
+        self.feature_extractor = tf.keras.layers.Conv2D(1, 9, 5, padding='same', name="dummy_conv")
