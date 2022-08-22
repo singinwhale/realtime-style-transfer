@@ -1,3 +1,5 @@
+from tracing import logsetup
+
 import numpy as np
 
 from pathlib import Path
@@ -19,7 +21,7 @@ log = logging.getLogger()
 
 tf.config.set_visible_devices([], 'GPU')
 
-from models import styleTransfer, stylePrediction, styleLoss
+from models import styleTransferFunctional, stylePrediction, styleLoss
 
 input_shape = {'content': image_shape, 'style': image_shape}
 output_shape = image_shape
@@ -35,7 +37,7 @@ def build_style_prediction_callback(batchnorm_layers):
     return stylePrediction.StylePredictionModelMobileNet(input_shape, batchnorm_layers)
 
 
-style_transfer_model = styleTransfer.StyleTransferModelFunctional(
+style_transfer_model = styleTransferFunctional.StyleTransferModelFunctional(
     input_shape,
     build_style_prediction_callback,
     style_loss_callback

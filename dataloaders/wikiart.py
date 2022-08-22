@@ -234,8 +234,10 @@ def get_dataset_debug(shapes, batch_size=1, **kwargs) -> (tf.data.Dataset, tf.da
                                                                                                 **kwargs)
     if "cache_dir" in kwargs:
         cache_dir = kwargs["cache_dir"]
-        training_dataset = training_dataset.cache(filename=str(Path(cache_dir) / "debug_training_dataset"))
-        validation_dataset = validation_dataset.cache(filename=str(Path(cache_dir) / "debug_validation_dataset"))
+        cache_path = Path(cache_dir)
+        cache_path.mkdir(parents=True, exist_ok=True)
+        training_dataset = training_dataset.cache(filename=str(cache_path / "debug_training_dataset"))
+        validation_dataset = validation_dataset.cache(filename=str(cache_path / "debug_validation_dataset"))
         log.info(f"Caching datasets into {cache_dir}. This could take a while")
         for name, dataset in {"training_dataset": training_dataset, "validation_dataset": validation_dataset}.items():
             # immediately cache everything
