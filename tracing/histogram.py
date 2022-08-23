@@ -1,7 +1,6 @@
 import logging
 
 import tensorflow as tf
-from tensorflow import keras
 
 log = logging.getLogger(__name__)
 log.setLevel(logging.INFO)
@@ -32,7 +31,7 @@ def writeModelHistogramSummary(model, step=None):
     log.debug(f"Wrote {counter} histograms")
 
 
-class HistogramCallback(keras.callbacks.Callback):
+class HistogramCallback(tf.keras.callbacks.Callback):
     model: tf.keras.models.Model
 
     def on_epoch_end(self, epoch, logs=None):

@@ -1,3 +1,5 @@
+from tracing import logsetup
+
 from pathlib import Path
 import tensorflow as tf
 import logging

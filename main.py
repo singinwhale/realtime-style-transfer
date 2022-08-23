@@ -48,7 +48,7 @@ cache_root_dir.mkdir(exist_ok=True)
 validation_log_datapoint = dataloaders.common.get_single_sample_from_dataset(validation_dataset)
 training_log_datapoint = dataloaders.common.get_single_sample_from_dataset(training_dataset)
 image_callback = SummaryImageCallback(validation_log_datapoint, training_log_datapoint)
-checkpoint_callback = CheckpointCallback(log_dir)
+checkpoint_callback = CheckpointCallback(log_dir / "checkpoints", cadence=10)
 histogram_callback = HistogramCallback()
 
 # tf.debugging.enable_check_numerics()
