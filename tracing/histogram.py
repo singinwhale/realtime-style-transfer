@@ -4,7 +4,7 @@ import tensorflow as tf
 from tensorflow import keras
 
 log = logging.getLogger(__name__)
-log.setLevel(logging.DEBUG)
+log.setLevel(logging.INFO)
 
 
 def writeModelHistogramSummary(model, step=None):

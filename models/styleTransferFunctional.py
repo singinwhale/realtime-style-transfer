@@ -73,9 +73,11 @@ def residual_block(input_shape, filters, size, strides, name, apply_dropout=Fals
     name = f"residual_block_{name}"
     initializer = tf.random_uniform_initializer(0., 0.05)
     inputs = tf.keras.Input(shape=input_shape)
-    fx = tf.keras.layers.Conv2D(filters, size, name=f"{name}_conv0", strides=strides, activation='relu', padding='same', kernel_initializer=initializer)(inputs)
+    fx = tf.keras.layers.Conv2D(filters, size, name=f"{name}_conv0", strides=strides, activation='relu', padding='same',
+                                kernel_initializer=initializer)(inputs)
     fx = tf.keras.layers.BatchNormalization()(fx)
-    fx = tf.keras.layers.Conv2D(filters, size, name=f"{name}_conv1", strides=strides, padding='same', kernel_initializer=initializer)(fx)
+    fx = tf.keras.layers.Conv2D(filters, size, name=f"{name}_conv1", strides=strides, padding='same',
+                                kernel_initializer=initializer)(fx)
     out = tf.keras.layers.Add()([inputs, fx])
     out = tf.keras.layers.ReLU()(out)
     out = tf.keras.layers.BatchNormalization()(out)
@@ -106,21 +108,17 @@ def contract(filters, size, strides, name, apply_dropout=False) -> tf.keras.Sequ
     return result
 
 
-def StyleTransferModelFunctional(input_shape,
-                                 style_predictor_factory_func: typing.Callable[[int], tf.keras.Model],
-                                 style_loss_func_factory_func: typing.Callable[[], typing.Callable[[typing.Dict, tf.Tensor], typing.Dict]],
-                                 name="StyleTransferModel"):
+def create_style_transfer_model(input_shape,
+                                name="StyleTransferModel"):
     decoder_layer_specs = [
         {"filters": 64, "size": 3, "strides": 2},
         {"filters": 32, "size": 3, "strides": 2},
     ]
-
-    inputs = {'content': tf.keras.layers.Input(shape=input_shape['content'][1:]), 'style': tf.keras.layers.Input(shape=input_shape['style'][1:])}
-    content_input, style_input = (inputs['content'], inputs['style'])
-
     num_style_parameters = sum(map(lambda spec: spec['filters'] * 2, decoder_layer_specs))
-    style_predictor = style_predictor_factory_func(num_style_parameters)
-    style_params = style_predictor(style_input)
+
+    inputs = {'content': tf.keras.layers.Input(shape=input_shape),
+              'style_params': tf.keras.layers.Input(shape=(num_style_parameters,))}
+    content_input, style_params = (inputs['content'], inputs['style_params'])
 
     x = tf.keras.Sequential(layers=[
         contract(32, 9, 1, name="0"),
@@ -128,7 +126,7 @@ def StyleTransferModelFunctional(input_shape,
         contract(128, 3, 2, name="2"),
     ], name="encoder")(content_input)
 
-    residual_block_input_shape = (input_shape['content'][1] // 4, input_shape['content'][2] // 4, 128)
+    residual_block_input_shape = (input_shape[0] // 4, input_shape[1] // 4, 128)
     x = tf.keras.Sequential(layers=[
         residual_block(residual_block_input_shape, 128, 3, 1, name="0"),
         residual_block(residual_block_input_shape, 128, 3, 1, name="1"),
@@ -137,18 +135,21 @@ def StyleTransferModelFunctional(input_shape,
         residual_block(residual_block_input_shape, 128, 3, 1, name="4"),
     ], name="bottleneck")(x)
 
-    input_filters = residual_block_input_shape[-1]
+    next_decoder_filters_num = residual_block_input_shape[-1]
     style_norm_param_lower_bound = 0
     for i, decoder_layer_spec in enumerate(decoder_layer_specs):
         style_norm_scale_upper_bound = style_norm_param_lower_bound + decoder_layer_spec["filters"]
         style_norm_offset_upper_bound = style_norm_scale_upper_bound + decoder_layer_spec["filters"]
         scale = style_params[:, style_norm_param_lower_bound:style_norm_scale_upper_bound]
         offset = style_params[:, style_norm_scale_upper_bound:style_norm_offset_upper_bound]
-        scale, offset = tf.expand_dims(scale, -2, name="expand_scale_0"), tf.expand_dims(offset, -2, name="expand_offset_0")
-        scale, offset = tf.expand_dims(scale, -2, name="expand_scale_1"), tf.expand_dims(offset, -2, name="expand_offset_1")
+        scale, offset = tf.expand_dims(scale, -2, name="expand_scale_0"), tf.expand_dims(offset, -2,
+                                                                                         name="expand_offset_0")
+        scale, offset = tf.expand_dims(scale, -2, name="expand_scale_1"), tf.expand_dims(offset, -2,
+                                                                                         name="expand_offset_1")
         style_norm_param_lower_bound = style_norm_offset_upper_bound
 
-        input_shape = (residual_block_input_shape[0] * 2 ** i, residual_block_input_shape[1] * 2 ** i, input_filters)
+        input_shape = (
+        residual_block_input_shape[0] * 2 ** i, residual_block_input_shape[1] * 2 ** i, next_decoder_filters_num)
         expand_layer = expand(input_shape=input_shape, name=i,
                               filters=decoder_layer_spec["filters"],
                               size=decoder_layer_spec["size"],
@@ -158,7 +159,7 @@ def StyleTransferModelFunctional(input_shape,
             "scale": scale,
             "bias": offset,
         })
-        input_filters = decoder_layer_spec["filters"]
+        next_decoder_filters_num = decoder_layer_spec["filters"]
 
     x = tf.keras.Sequential(layers=[
         tf.keras.layers.Conv2DTranspose(filters=3, kernel_size=1, strides=1, padding='same',
@@ -168,10 +169,4 @@ def StyleTransferModelFunctional(input_shape,
     ], name="Top")(x)
 
     model = tf.keras.Model(inputs=inputs, outputs=x, name=name)
-    losses = style_loss_func_factory_func()(inputs, x)
-    model.add_loss(losses['loss'])
-    for loss_name, loss_value in losses.items():
-        if loss_name == "loss":
-            continue
-        model.add_metric(value=loss_value, name=loss_name)
-    return model
+    return model, num_style_parameters

@@ -101,7 +101,7 @@ class StyleLossModelEfficientNet(StyleLossModelBase):
 
         # Load our model. Load pretrained VGG, trained on ImageNet data
         efficientnet = tf.keras.applications.efficientnet.EfficientNetB3(include_top=False,
-                                                                         input_shape=input_shape[-3:])
+                                                                         input_shape=input_shape)
         efficientnet.trainable = False
 
         outputs = [efficientnet.get_layer(name).output for name in output_layer_names]
@@ -139,7 +139,7 @@ class StyleLossModelMobileNet(StyleLossModelBase):
         output_layer_names = style_layer_names + content_layer_names
 
         # Load our model. Load pretrained VGG, trained on ImageNet data
-        mobile_net = tf.keras.applications.MobileNetV3Small(include_top=False, input_shape=input_shape[-3:])
+        mobile_net = tf.keras.applications.MobileNetV3Small(include_top=False, input_shape=input_shape)
         mobile_net.trainable = False
 
         outputs = [mobile_net.get_layer(name).output for name in output_layer_names]
@@ -165,7 +165,7 @@ class StyleLossModelDummy(StyleLossModelBase):
     def __init__(self, input_shape, name="StyleLossModelDummy"):
         super().__init__(name=name)
 
-        inputs = tf.keras.Input(shape=input_shape[1:])
+        inputs = tf.keras.Input(shape=input_shape)
 
         conv1 = tf.keras.layers.Conv2D(3, 3, 1, padding='same', name="dummy_conv1")
         output1 = conv1(inputs)

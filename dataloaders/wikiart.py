@@ -160,13 +160,16 @@ def get_dataset(shapes, batch_size, **kwargs) -> (tf.data.Dataset, tf.data.Datas
         rng.shuffle(filepaths)
 
     validation_split_index = math.floor(len(filepaths) * 0.8)
-    shape_without_batches = {key: shape[1:] for key, shape in shapes.items()}
+    shape_without_batches = shapes
 
-    training_style_dataset = common.image_dataset_from_filepaths(filepaths[:validation_split_index], shape_without_batches['style'])
-    validation_style_dataset = common.image_dataset_from_filepaths(filepaths[validation_split_index:], shape_without_batches['style'])
+    training_style_dataset = common.image_dataset_from_filepaths(filepaths[:validation_split_index],
+                                                                 shape_without_batches['style'])
+    validation_style_dataset = common.image_dataset_from_filepaths(filepaths[validation_split_index:],
+                                                                   shape_without_batches['style'])
 
     training_content_dataset, validation_content_dataset = \
-        common.load_training_and_validation_dataset_from_directory(content_image_dir, shape_without_batches['content'], **kwargs)
+        common.load_training_and_validation_dataset_from_directory(content_image_dir, shape_without_batches['content'],
+                                                                   **kwargs)
 
     training_dataset = common.pair_up_content_and_style_datasets(content_dataset=training_content_dataset,
                                                                  style_dataset=training_style_dataset,
@@ -175,13 +178,15 @@ def get_dataset(shapes, batch_size, **kwargs) -> (tf.data.Dataset, tf.data.Datas
                                                                    style_dataset=validation_style_dataset,
                                                                    shapes=shape_without_batches)
 
-    if shapes['content'][0] is None:
+    if batch_size is not None:
         training_dataset = training_dataset.batch(batch_size)
         validation_dataset = validation_dataset.batch(batch_size)
 
     if 'cache_dir' in kwargs:
         cache_dir = kwargs['cache_dir']
-        training_dataset, validation_dataset = training_dataset.cache(filename=str(cache_dir / "wikiart_training_dataset")), validation_dataset.cache(filename=str(cache_dir / "wikiart_validation_dataset"))
+        training_dataset = training_dataset.cache(filename=str(cache_dir / "wikiart_training_dataset"))
+        validation_dataset = validation_dataset.cache(filename=str(cache_dir / "wikiart_validation_dataset"))
+
         log.info(f"Caching datasets into {cache_dir}. This could take a while")
         for name, dataset in {"training_dataset": training_dataset, "validation_dataset": validation_dataset}.items():
             # immediately cache everything
@@ -219,11 +224,11 @@ def get_dataset_debug(shapes, batch_size=1, **kwargs) -> (tf.data.Dataset, tf.da
             debug_image_path = style_debug_image_dir / subset / image.name
             shutil.copyfile(image, debug_image_path)
 
-    if shapes['content'][0] is None:
+    if batch_size is not None:
         training_dataset, validation_dataset = \
             common.load_content_and_style_dataset_from_paths(content_debug_image_dir,
                                                              style_debug_image_dir,
-                                                             {key: shape[1:] for key, shape in shapes.items()},
+                                                             shapes,
                                                              **kwargs)
         training_dataset = training_dataset.batch(batch_size)
         validation_dataset = validation_dataset.batch(batch_size)

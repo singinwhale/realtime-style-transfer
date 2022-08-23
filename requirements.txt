@@ -8,3 +8,4 @@ pillow
 kaggle
 httpx
 pydot==1.4.*
+tf2onnx==1.12.*

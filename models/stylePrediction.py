@@ -1,3 +1,5 @@
+import enum
+
 import tensorflow as tf
 
 import logging
@@ -14,64 +16,54 @@ DENSE_KERNEL_INITIALIZER = {
 }
 
 
-class StylePredictionModelBase(tf.keras.Model):
-    feature_extractor = None
-
-    def __init__(self, num_top_parameters, num_style_parameters=100, dropout_rate=0.2, name="StylePredictionModel"):
-        super().__init__(name=name)
-
-        self.dropout_rate = dropout_rate
-        log.info(f"Using {num_style_parameters} style parameters")
-        self.style_predictor = tf.keras.layers.Dense(
-            num_style_parameters,
-            activation=tf.keras.activations.softmax,
-            kernel_initializer=DENSE_KERNEL_INITIALIZER,
-            bias_initializer=tf.constant_initializer(1),
-            name="style_predictor")
-
-        num_norm_parameters = num_top_parameters
-        log.debug(f"Using {num_norm_parameters} norm parameters")
-        self.style_norm_predictor = tf.keras.layers.Dense(
-            num_norm_parameters,
-            activation=tf.keras.activations.softmax,
-            kernel_initializer=DENSE_KERNEL_INITIALIZER,
-            bias_initializer=tf.constant_initializer(0.5),
-            name="style_norm_predictor")
-
-    def call(self, inputs, training=None, mask=None):
-        x = self.feature_extractor(inputs)
-
-        x = tf.keras.layers.GlobalAveragePooling2D(name="avg_pool")(x)
-        if self.dropout_rate > 0:
-            x = tf.keras.layers.Dropout(self.dropout_rate, name="top_dropout")(x)
-
-        x = self.style_predictor(x)
-        x = self.style_norm_predictor(x)
-        return x
+class StyleFeatureExtractor(enum.Enum):
+    DUMMY = 'DUMMY'
+    EFFICIENT_NET = 'EFFICIENT_NET'
+    MOBILE_NET = 'MOBILE_NET'
 
 
-class StylePredictionModelEfficientNet(StylePredictionModelBase):
+def create_style_prediction_model(input_shape, feature_extractor: StyleFeatureExtractor, num_top_parameters,
+                                  num_style_parameters=100, dropout_rate=0.2,
+                                  name="StylePredictionModel"):
+    inputs = tf.keras.Input(shape=input_shape)
 
-    def __init__(self, input_shape, num_top_parameters, dropout_rate=0.2, name="StylePredictionModelEfficientNet"):
-        super().__init__(num_top_parameters, dropout_rate=dropout_rate, name=name)
-        self.feature_extractor = \
-            tf.keras.applications.efficientnet_v2.EfficientNetV2S(include_top=False,
-                                                                  input_shape=input_shape['style'][-3:])
-        self.feature_extractor.trainable = True
+    if feature_extractor == StyleFeatureExtractor.DUMMY:
+        feature_extractor_model = tf.keras.layers.Conv2D(1, 9, 5, padding='same', name="dummy_conv")
+    elif feature_extractor == StyleFeatureExtractor.MOBILE_NET:
+        feature_extractor_model = tf.keras.applications.MobileNetV3Small(
+            include_top=False,
+            input_shape=input_shape)
+    elif feature_extractor == StyleFeatureExtractor.EFFICIENT_NET:
+        feature_extractor_model = tf.keras.applications.efficientnet_v2.EfficientNetV2S(
+            include_top=False,
+            input_shape=input_shape)
+    else:
+        raise ValueError(
+            f"{feature_extractor} is not a valid value for feature_extractor. Must be a StyleFeatureExtractor")
 
+    feature_extractor_model.trainable = True
 
-class StylePredictionModelMobileNet(StylePredictionModelBase):
+    x = feature_extractor_model(inputs)
 
-    def __init__(self, input_shape, num_top_parameters, dropout_rate=0.2, name="StylePredictionModel"):
-        super().__init__(num_top_parameters, dropout_rate=dropout_rate, name=name)
-        self.feature_extractor = \
-            tf.keras.applications.MobileNetV3Small(include_top=False,
-                                                   input_shape=input_shape['style'][-3:],)
-        self.feature_extractor.trainable = True
+    x = tf.keras.layers.GlobalAveragePooling2D(name="avg_pool")(x)
+    if dropout_rate > 0:
+        x = tf.keras.layers.Dropout(dropout_rate, name="top_dropout")(x)
 
+    log.info(f"Using {num_style_parameters} style parameters")
+    x = tf.keras.layers.Dense(
+        num_style_parameters,
+        activation=tf.keras.activations.softmax,
+        kernel_initializer=DENSE_KERNEL_INITIALIZER,
+        bias_initializer=tf.constant_initializer(1),
+        name="StylePredictor")(x)
 
-class StylePredictionModelDummy(StylePredictionModelBase):
+    num_norm_parameters = num_top_parameters
+    log.debug(f"Using {num_norm_parameters} norm parameters")
+    x = tf.keras.layers.Dense(
+        num_norm_parameters,
+        activation=tf.keras.activations.softmax,
+        kernel_initializer=DENSE_KERNEL_INITIALIZER,
+        bias_initializer=tf.constant_initializer(0.5),
+        name="StyleNormPredictor")(x)
 
-    def __init__(self, num_top_parameters, dropout_rate=0.2, name="StylePredictionModel"):
-        super().__init__(num_top_parameters, dropout_rate=dropout_rate, name=name)
-        self.feature_extractor = tf.keras.layers.Conv2D(1, 9, 5, padding='same', name="dummy_conv")
+    return tf.keras.Model(inputs=inputs, outputs=x, name=name)
