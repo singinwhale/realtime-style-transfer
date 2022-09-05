@@ -3,6 +3,7 @@
 /data
 /logs
 /cache
+/temp
 
 # python transient files
 __pycache__
