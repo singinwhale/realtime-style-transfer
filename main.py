@@ -17,7 +17,7 @@ except:
     # Invalid device or cannot modify virtual devices once initialized.
     pass
 
-tf.debugging.disable_traceback_filtering()
+# tf.debugging.disable_traceback_filtering()
 
 import logging
 
@@ -32,6 +32,7 @@ from dataloaders import wikiart
 from models import stylePrediction, styleLoss, styleTransferFunctional, styleTransferTrainingModel
 from tracing.tf_image_callback import SummaryImageCallback
 from renderers.matplotlib import predict_datapoint
+from tracing.textSummary import capture_model_summary
 
 resolution_divider = 2
 input_shape = {'content': (960 // resolution_divider, 1920 // resolution_divider, 3),
@@ -40,7 +41,7 @@ output_shape = (960 // resolution_divider, 1920 // resolution_divider, 3)
 
 # with tf.profiler.experimental.Profile(str(log_dir)):
 # training_dataset, validation_dataset = wikiart.get_dataset_debug(input_shape, batch_size=4)
-training_dataset, validation_dataset = wikiart.get_dataset(input_shape, batch_size=16, cache_dir=cache_root_dir, seed=347890842)
+training_dataset, validation_dataset = wikiart.get_dataset_debug(input_shape, batch_size=16, cache_dir=cache_root_dir, seed=347890842)
 
 cache_root_dir.mkdir(exist_ok=True)
 
@@ -49,6 +50,7 @@ training_log_datapoint = dataloaders.common.get_single_sample_from_dataset(train
 image_callback = SummaryImageCallback(validation_log_datapoint, training_log_datapoint)
 checkpoint_callback = CheckpointCallback(log_dir / "checkpoints", cadence=10)
 histogram_callback = HistogramCallback()
+tensorboard_callback = tf.keras.callbacks.TensorBoard(log_dir=str(log_dir))
 
 # tf.debugging.enable_check_numerics()
 summary_writer = tf.summary.create_file_writer(logdir=str(log_dir))
@@ -61,15 +63,19 @@ with summary_writer.as_default() as summary:
             input_shape['style'], stylePrediction.StyleFeatureExtractor.MOBILE_NET, num_top_parameters
         ),
         style_transfer_factory_func=lambda: styleTransferFunctional.create_style_transfer_model(input_shape['content']),
-        style_loss_func_factory_func=lambda: styleLoss.make_style_loss_function(style_loss_model),
+        style_loss_func_factory_func=lambda: styleLoss.make_style_loss_function(style_loss_model, input_shape, output_shape),
     )
 
     style_transfer_training_model.training.compile()
 
-    tb_callback = tf.keras.callbacks.TensorBoard(log_dir=str(log_dir))
+    summary_text = capture_model_summary(style_transfer_training_model.training)
+    tf.summary.text('summary', f"```\n{summary_text}\n```", -1)
+    summary_text = capture_model_summary(style_transfer_training_model.training, detailed=True)
+    tf.summary.text('summary_detailed', f"```\n{summary_text}\n```", -1)
+
     predict_datapoint(validation_log_datapoint, training_log_datapoint, style_transfer_training_model.training,
                       callbacks=[histogram_callback])
-    style_transfer_training_model.training.fit(x=training_dataset, validation_data=validation_dataset, epochs=300,
-                                      callbacks=[tb_callback, image_callback, checkpoint_callback, histogram_callback])
+    style_transfer_training_model.training.fit(x=training_dataset, validation_data=validation_dataset, epochs=100,
+                                               callbacks=[tensorboard_callback, image_callback, checkpoint_callback, histogram_callback])
     predict_datapoint(validation_log_datapoint, training_log_datapoint, style_transfer_training_model.training,
                       callbacks=[histogram_callback])

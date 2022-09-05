@@ -30,7 +30,7 @@ output_shape = image_shape
 
 def build_style_loss_function():
     style_loss_model = styleLoss.StyleLossModelMobileNet(output_shape)
-    return styleLoss.make_style_loss_function(style_loss_model)
+    return styleLoss.make_style_loss_function(style_loss_model, input_shape, output_shape)
 
 
 def build_style_prediction_model(batchnorm_layers):
@@ -66,8 +66,8 @@ element = {
 log.info(f"Running inference to build model...")
 # call once to build models
 style_transfer_models.training(element)
-# log.info(f"Loading weights...")
-# style_transfer_model.load_weights(filepath=str(checkpoint_path))
+log.info(f"Loading weights...")
+style_transfer_models.training.load_weights(filepath=str(checkpoint_path))
 
 log.info(f"Saving model...")
 transfer_path = outpath.with_suffix(".transfer.tf")

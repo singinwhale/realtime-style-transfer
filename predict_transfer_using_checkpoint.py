@@ -45,7 +45,7 @@ style_transfer_training_model = styleTransferTrainingModel.make_style_transfer_t
         input_shape['style'], stylePrediction.StyleFeatureExtractor.MOBILE_NET, num_top_parameters
     ),
     style_transfer_factory_func=lambda: styleTransferFunctional.create_style_transfer_model(input_shape['content']),
-    style_loss_func_factory_func=lambda: styleLoss.make_style_loss_function(style_loss_model),
+    style_loss_func_factory_func=lambda: styleLoss.make_style_loss_function(style_loss_model, {'content': image_shape, 'style': image_shape}, image_shape),
 )
 element = {
     'content': tf.zeros((1,) + image_shape),
