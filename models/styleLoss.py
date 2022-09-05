@@ -165,7 +165,7 @@ class StyleLossModelDummy(StyleLossModelBase):
     def __init__(self, input_shape, name="StyleLossModelDummy"):
         super().__init__(name=name)
 
-        inputs = tf.keras.Input(shape=input_shape)
+        inputs = tf.keras.Input(shape=input_shape, dtype=tf.float32)
 
         conv1 = tf.keras.layers.Conv2D(3, 3, 1, padding='same', name="dummy_conv1")
         output1 = conv1(inputs)

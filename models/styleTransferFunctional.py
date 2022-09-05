@@ -40,7 +40,7 @@ def expand(input_shape, filters, size, strides, name, apply_dropout=False) -> tf
     name = f"expand_{name}"
     initializer = tf.random_normal_initializer(0., 0.02)
 
-    content_inputs = tf.keras.layers.Input(shape=input_shape)
+    content_inputs = tf.keras.layers.Input(shape=input_shape, dtype=tf.float32)
     scale = tf.keras.layers.Input(shape=(1, 1, filters))
     bias = tf.keras.layers.Input(shape=(1, 1, filters))
     inputs = {

@@ -54,7 +54,7 @@ def expand(filters, size, strides, batch_size, name, apply_dropout=False) -> tf.
 
 def residual_block(input_shape, filters, size, strides, name, apply_dropout=False) -> tf.keras.Model:
     name = f"residual_block_{name}"
-    inputs = tf.keras.Input(shape=input_shape)
+    inputs = tf.keras.Input(shape=input_shape, dtype=tf.float32)
     fx = tf.keras.layers.Conv2D(filters, size, strides=strides, activation='relu', padding='same')(inputs)
     fx = tf.keras.layers.BatchNormalization()(fx)
     fx = tf.keras.layers.Conv2D(filters, size, strides=strides, padding='same')(fx)

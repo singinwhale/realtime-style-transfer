@@ -2,33 +2,32 @@ from tracing import logsetup
 
 from pathlib import Path
 import tensorflow as tf
+import numpy as np
 import logging
 import argparse
+import matplotlib.pyplot as plt
 
-from dataloaders import common
+from dataloaders import common, tensorbuffer
 
 argparser = argparse.ArgumentParser()
 argparser.add_argument('--checkpoint_path', '-C', type=Path, required=True)
-argparser.add_argument('--style_image_path', '-s', type=Path, required=True)
+argparser.add_argument('--style_tensor_path', '-st', type=Path, required=True)
 argparser.add_argument('--content_image_path', '-c', type=Path, required=True)
 argparser.add_argument('--outpath', '-o', type=Path, required=False)
 
 args = argparser.parse_args()
 checkpoint_path = args.checkpoint_path
-style_image_path = args.style_image_path
+style_tensor_path = args.style_tensor_path
 content_image_path = args.content_image_path
 outpath = args.outpath
 
 image_shape = (960, 1920, 3)
 
-datapoint = common.pair_up_content_and_style_datasets(
-    content_dataset=common.image_dataset_from_filepaths([content_image_path], image_shape).batch(1),
-    style_dataset=common.image_dataset_from_filepaths([style_image_path], image_shape).batch(1),
-    shapes={
-        'content': (None,) + image_shape,
-        'style': (None,) + image_shape,
-    }
-)
+content_dataset = common.image_dataset_from_filepaths([content_image_path], image_shape).batch(1)
+datapoint = {
+    'content': content_dataset.get_single_element(),
+    'style_params': tensorbuffer.load_tensor_from_buffer(style_tensor_path, (1, 192,))
+}
 
 log = logging.getLogger()
 
@@ -48,15 +47,23 @@ style_transfer_training_model = styleTransferTrainingModel.make_style_transfer_t
     style_transfer_factory_func=lambda: styleTransferFunctional.create_style_transfer_model(input_shape['content']),
     style_loss_func_factory_func=lambda: styleLoss.make_style_loss_function(style_loss_model),
 )
-element = datapoint.get_single_element()
+element = {
+    'content': tf.zeros((1,) + image_shape),
+    'style': tf.zeros((1,) + image_shape),
+}
 
 # call once to build model
 style_transfer_training_model.training(element)
 style_transfer_training_model.training.load_weights(filepath=str(checkpoint_path))
-predict_datapoint(element, element, style_transfer_training_model.training)
+
+style_params_tensor = tensorbuffer.load_tensor_from_buffer(style_tensor_path, (1, 192,))
+result = np.squeeze(style_transfer_training_model.transfer(datapoint).numpy())
+plt.imshow(result)
 
 # save result if required
 if outpath is not None:
     result = style_transfer_training_model.training(element)
     image_data = result.numpy().squeeze()
     tf.keras.utils.save_img(outpath, image_data, data_format='channels_last')
+
+plt.show()

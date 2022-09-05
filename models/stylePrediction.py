@@ -25,7 +25,7 @@ class StyleFeatureExtractor(enum.Enum):
 def create_style_prediction_model(input_shape, feature_extractor: StyleFeatureExtractor, num_top_parameters,
                                   num_style_parameters=100, dropout_rate=0.2,
                                   name="StylePredictionModel"):
-    inputs = tf.keras.Input(shape=input_shape)
+    inputs = tf.keras.Input(shape=input_shape, dtype=tf.float32)
 
     if feature_extractor == StyleFeatureExtractor.DUMMY:
         feature_extractor_model = tf.keras.layers.Conv2D(1, 9, 5, padding='same', name="dummy_conv")

@@ -79,7 +79,7 @@ def image_dataset_from_directory(image_dir: Path, shape, **kwargs):
     return dataset
 
 
-def image_dataset_from_filepaths(filepaths, shape):
+def image_dataset_from_filepaths(filepaths, shape) -> tf.data.Dataset:
     def generate_image_tensors():
         for imagepath in filepaths:
             try:
@@ -93,7 +93,7 @@ def image_dataset_from_filepaths(filepaths, shape):
     return dataset
 
 
-def pair_up_content_and_style_datasets(content_dataset, style_dataset, shapes):
+def pair_up_content_and_style_datasets(content_dataset, style_dataset, shapes) -> tf.data.Dataset:
     def _pair_up_dataset():
         for i, (content, style) in enumerate(zip(content_dataset, style_dataset)):
             datapoint = {'content': content, 'style': style}
