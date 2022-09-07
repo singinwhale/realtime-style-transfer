@@ -29,7 +29,7 @@ log_dir = log_root_dir / str(datetime.datetime.now().strftime("%Y-%m-%d-%H-%M-%S
 log_dir.mkdir(exist_ok=True, parents=True, )
 
 from dataloaders import wikiart
-from models import stylePrediction, styleLoss, styleTransferFunctional, styleTransferTrainingModel
+from models import stylePrediction, styleLoss, styleTransfer, styleTransferTrainingModel
 from tracing.tf_image_callback import SummaryImageCallback
 from renderers.matplotlib import predict_datapoint
 from tracing.textSummary import capture_model_summary
@@ -41,7 +41,7 @@ output_shape = (960 // resolution_divider, 1920 // resolution_divider, 3)
 
 # with tf.profiler.experimental.Profile(str(log_dir)):
 # training_dataset, validation_dataset = wikiart.get_dataset_debug(input_shape, batch_size=4)
-training_dataset, validation_dataset = wikiart.get_dataset_debug(input_shape, batch_size=16, cache_dir=cache_root_dir, seed=347890842)
+training_dataset, validation_dataset = wikiart.get_dataset(input_shape, batch_size=4**resolution_divider, cache_dir=cache_root_dir, seed=347890842)
 
 cache_root_dir.mkdir(exist_ok=True)
 
@@ -62,7 +62,7 @@ with summary_writer.as_default() as summary:
         style_predictor_factory_func=lambda num_top_parameters: stylePrediction.create_style_prediction_model(
             input_shape['style'], stylePrediction.StyleFeatureExtractor.MOBILE_NET, num_top_parameters
         ),
-        style_transfer_factory_func=lambda: styleTransferFunctional.create_style_transfer_model(input_shape['content']),
+        style_transfer_factory_func=lambda: styleTransfer.create_style_transfer_model(input_shape['content']),
         style_loss_func_factory_func=lambda: styleLoss.make_style_loss_function(style_loss_model, input_shape, output_shape),
     )
 
@@ -75,7 +75,7 @@ with summary_writer.as_default() as summary:
 
     predict_datapoint(validation_log_datapoint, training_log_datapoint, style_transfer_training_model.training,
                       callbacks=[histogram_callback])
-    style_transfer_training_model.training.fit(x=training_dataset, validation_data=validation_dataset, epochs=100,
+    style_transfer_training_model.training.fit(x=training_dataset, validation_data=validation_dataset, epochs=400,
                                                callbacks=[tensorboard_callback, image_callback, checkpoint_callback, histogram_callback])
     predict_datapoint(validation_log_datapoint, training_log_datapoint, style_transfer_training_model.training,
                       callbacks=[histogram_callback])

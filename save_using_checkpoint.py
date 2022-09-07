@@ -22,7 +22,7 @@ log = logging.getLogger()
 
 tf.config.set_visible_devices([], 'GPU')
 
-from models import styleTransferFunctional, stylePrediction, styleLoss, styleTransferTrainingModel
+from models import styleTransfer, stylePrediction, styleLoss, styleTransferTrainingModel
 
 input_shape = {'content': image_shape, 'style': image_shape}
 output_shape = image_shape
@@ -47,7 +47,7 @@ num_style_norm_params = None
 
 def build_style_transfer_model():
     global num_style_norm_params
-    transfer_model_data = styleTransferFunctional.create_style_transfer_model(input_shape['content'])
+    transfer_model_data = styleTransfer.create_style_transfer_model(input_shape['content'])
     num_style_norm_params = transfer_model_data[1]
     return transfer_model_data
 

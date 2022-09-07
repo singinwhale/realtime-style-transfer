@@ -31,7 +31,7 @@ datapoint = {
 
 log = logging.getLogger()
 
-from models import styleTransferFunctional, stylePrediction, styleLoss, styleTransferTrainingModel
+from models import styleTransfer, stylePrediction, styleLoss, styleTransferTrainingModel
 from renderers.matplotlib import predict_datapoint
 
 input_shape = {'content': image_shape, 'style': image_shape}
@@ -44,7 +44,7 @@ style_transfer_training_model = styleTransferTrainingModel.make_style_transfer_t
     style_predictor_factory_func=lambda num_top_parameters: stylePrediction.create_style_prediction_model(
         input_shape['style'], stylePrediction.StyleFeatureExtractor.MOBILE_NET, num_top_parameters
     ),
-    style_transfer_factory_func=lambda: styleTransferFunctional.create_style_transfer_model(input_shape['content']),
+    style_transfer_factory_func=lambda: styleTransfer.create_style_transfer_model(input_shape['content']),
     style_loss_func_factory_func=lambda: styleLoss.make_style_loss_function(style_loss_model, {'content': image_shape, 'style': image_shape}, image_shape),
 )
 element = {
