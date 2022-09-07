@@ -7,9 +7,6 @@ from pathlib import Path
 
 import tensorflow as tf
 
-from tracing.checkpoint import CheckpointCallback
-from tracing.histogram import HistogramCallback
-
 physical_devices = tf.config.list_physical_devices('GPU')
 try:
     tf.config.experimental.set_memory_growth(physical_devices[0], True)
@@ -33,6 +30,8 @@ from models import stylePrediction, styleLoss, styleTransfer, styleTransferTrain
 from tracing.tf_image_callback import SummaryImageCallback
 from renderers.matplotlib import predict_datapoint
 from tracing.textSummary import capture_model_summary
+from tracing.checkpoint import CheckpointCallback
+from tracing.histogram import HistogramCallback, write_model_histogram_summary
 
 resolution_divider = 2
 input_shape = {'content': (960 // resolution_divider, 1920 // resolution_divider, 3),
@@ -73,8 +72,7 @@ with summary_writer.as_default() as summary:
     summary_text = capture_model_summary(style_transfer_training_model.training, detailed=True)
     tf.summary.text('summary_detailed', f"```\n{summary_text}\n```", -1)
 
-    predict_datapoint(validation_log_datapoint, training_log_datapoint, style_transfer_training_model.training,
-                      callbacks=[histogram_callback])
+    write_model_histogram_summary(style_transfer_training_model.training, -1)
     style_transfer_training_model.training.fit(x=training_dataset, validation_data=validation_dataset, epochs=400,
                                                callbacks=[tensorboard_callback, image_callback, checkpoint_callback, histogram_callback])
     predict_datapoint(validation_log_datapoint, training_log_datapoint, style_transfer_training_model.training,

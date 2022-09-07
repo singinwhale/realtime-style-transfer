@@ -7,26 +7,46 @@ import logging
 log = logging.getLogger(__name__)
 
 
+class StyleParamStack:
+
+    def __init__(self, style_params):
+        self.style_params = style_params
+        self.lower_bound = 0
+
+    def get_params(self, num_params):
+        with tf.name_scope("StyleParamStack.get_params"):
+            lower_bound = self.lower_bound
+            upper_bound = lower_bound + num_params
+            self.lower_bound = upper_bound
+            return self.style_params[..., lower_bound:upper_bound]
+
+    def make_content_and_style_input(self, content, num_params):
+        return {
+            'content': content,
+            'style_params': self.get_params(num_params)
+        }
+
+
 class ConditionalInstanceNormalization(tf.keras.layers.Layer):
     """Instance Normalization Layer (https://arxiv.org/abs/1607.08022)."""
+    NumParamsPerFeature: int = 2
 
-    def __init__(self, num_feature_maps, epsilon=1e-5):
-        super().__init__(name="ConditionalInstanceNormalization")
+    def __init__(self, num_feature_maps, name, epsilon=1e-5):
+        super().__init__(name=f"ConditionalInstanceNormalization_{name}")
         self.epsilon = epsilon
         self.num_feature_maps = num_feature_maps
 
     def call(self, x, **kwargs):
         inputs = x
-        x = inputs['inputs']
-        scale = inputs['scale']
-        bias = inputs['bias']
+        x = inputs['content']
+        style_params = StyleParamStack(inputs['style_params'])
+        scale = style_params.get_params(self.num_feature_maps)
+        bias = style_params.get_params(self.num_feature_maps)
 
         mean, variance = tf.nn.moments(x, axes=[1, 2], keepdims=True)
-        inv = tf.math.rsqrt(variance + self.epsilon)
-        normalized = (x - mean) * inv
-        x = normalized
 
-        x = x * scale + bias
+        inv = tf.math.rsqrt(variance + self.epsilon) * scale
+        x = x * tf.cast(inv, x.dtype) + tf.cast(bias - mean * inv, x.dtype)
         return x
 
     def get_config(self):
@@ -36,130 +56,136 @@ class ConditionalInstanceNormalization(tf.keras.layers.Layer):
         }
 
 
-def expand(input_shape, filters, size, strides, name, apply_dropout=False) -> tf.keras.Model:
+def expand(input_shape, filters, size, strides, name, apply_dropout=False):
     name = f"expand_{name}"
     initializer = tf.random_normal_initializer(0., 0.02)
 
     content_inputs = tf.keras.layers.Input(shape=input_shape, dtype=tf.float32, name="input_content")
-    scale = tf.keras.layers.Input(shape=(1, 1, filters), name="input_scale")
-    bias = tf.keras.layers.Input(shape=(1, 1, filters), name="input_bias")
+    num_style_params = filters * ConditionalInstanceNormalization.NumParamsPerFeature
+    style_params = tf.keras.layers.Input(shape=(1, 1, num_style_params), name="input_scale")
     inputs = {
-        "inputs": content_inputs,
-        "scale": scale,
-        "bias": bias,
+        "content": content_inputs,
+        "style_params": style_params,
     }
     result = tf.keras.layers.Conv2DTranspose(
         filters=filters, kernel_size=size, strides=strides, padding='same',
         kernel_initializer=initializer,
-        use_bias=False,  # todo: investigate why this is False in the magenta project
         name=f"{name}_conv")(content_inputs)
 
     instance_norm_args = {
-        "inputs": result,
-        "scale": scale,
-        "bias": bias,
+        "content": result,
+        "style_params": style_params,
     }
-    result = ConditionalInstanceNormalization(filters)(instance_norm_args)
+    result = ConditionalInstanceNormalization(filters, 0)(instance_norm_args)
 
     if apply_dropout:
         result = tf.keras.layers.Dropout(0.5)(result)
 
     result = tf.keras.layers.ReLU()(result)
 
-    return tf.keras.Model(inputs, result, name=name)
+    return tf.keras.Model(inputs, result, name=name), num_style_params
 
 
-def residual_block(input_shape, filters, size, strides, name, apply_dropout=False) -> tf.keras.Model:
+def residual_block(input_shape, filters, size, strides, name, apply_dropout=False):
     name = f"residual_block_{name}"
     initializer = tf.random_uniform_initializer(0., 0.05)
-    inputs = tf.keras.Input(shape=input_shape)
-    fx = tf.keras.layers.Conv2D(filters, size, name=f"{name}_conv0", strides=strides, activation='relu', padding='same',
-                                kernel_initializer=initializer)(inputs)
-    fx = tf.keras.layers.BatchNormalization()(fx)
-    fx = tf.keras.layers.Conv2D(filters, size, name=f"{name}_conv1", strides=strides, padding='same',
-                                kernel_initializer=initializer)(fx)
-    out = tf.keras.layers.Add()([inputs, fx])
-    out = tf.keras.layers.ReLU()(out)
-    out = tf.keras.layers.BatchNormalization()(out)
-    return tf.keras.models.Model(inputs, out, name=f"{name}")
+    content_input = tf.keras.Input(shape=input_shape, name="content_input")
+    num_conv_and_norms = 2
+    num_style_params = filters * num_conv_and_norms * ConditionalInstanceNormalization.NumParamsPerFeature
+    style_params_input = tf.keras.Input(shape=(1, 1, num_style_params), name="style_params_input")
+    inputs = {
+        'content': content_input,
+        'style_params': style_params_input,
+    }
+    style_params = StyleParamStack(style_params_input)
+
+    fx = content_input
+    for i in range(num_conv_and_norms):
+        fx = tf.keras.layers.Conv2D(filters, size, name=f"{name}_conv{i}", strides=strides, activation=tf.nn.relu, padding='same',
+                                    kernel_initializer=initializer)(fx)
+        fx = ConditionalInstanceNormalization(filters, name=i)({
+            'content': fx,
+            'style_params': style_params.get_params(filters * ConditionalInstanceNormalization.NumParamsPerFeature)
+        })
+
+    out = tf.keras.layers.Add()([content_input, fx])
+    return (tf.keras.models.Model(inputs, out, name=f"{name}"), num_style_params)
 
 
-def contract(filters, size, strides, name, apply_dropout=False) -> tf.keras.Sequential:
+def contract(input_shape, filters, size, strides, name, apply_dropout=False) -> tf.keras.Sequential:
     name = f"contract_{name}"
     initializer = tf.random_normal_initializer(0., 0.02)
 
-    result = tf.keras.Sequential(name=name)
-    result.add(
-        tf.keras.layers.Conv2D(filters, size,
+    inputs = tf.keras.Input(shape=input_shape, name="contract_input")
+
+    x = tf.keras.layers.Conv2D(filters, size,
                                strides=strides,
                                padding='same',
                                kernel_initializer=initializer,
-                               use_bias=False,
-                               name=f"{name}_conv")
-    )
+                               activation=tf.nn.relu,
+                               name=f"{name}_conv")(inputs)
 
-    result.add(tf.keras.layers.BatchNormalization())
+    x = tf.keras.layers.BatchNormalization()(x)
 
     if apply_dropout:
-        result.add(tf.keras.layers.Dropout(0.5))
+        x = tf.keras.layers.Dropout(0.5)(x)
 
-    result.add(tf.keras.layers.ReLU())
+    result = tf.keras.layers.ReLU()(x)
 
-    return result
+    return tf.keras.Model(inputs, result, name=name)
+
+
+def calc_next_conv_dims(initial, filters, mult):
+    if len(initial) == 3: return (int(initial[0] * mult), int(initial[1] * mult), filters)
+    return (initial[0], initial[1] * mult, initial[2] * mult, filters)
 
 
 def create_style_transfer_model(input_shape,
                                 name="StyleTransferModel"):
-    decoder_layer_specs = [
-        {"filters": 64, "size": 3, "strides": 2},
-        {"filters": 32, "size": 3, "strides": 2},
+    contract_blocks = [
+        contract(input_shape, 32, 9, 1, name="0"),
+        contract(calc_next_conv_dims(input_shape, 32, 1), 64, 3, 2, name="1"),
+        contract(calc_next_conv_dims(input_shape, 64, 2 ** -1), 128, 3, 2, name="2"),
     ]
-    num_style_parameters = sum(map(lambda spec: spec['filters'], decoder_layer_specs)) * 2
+
+    res_input_shape = calc_next_conv_dims(input_shape, 128, 2 ** -2)
+    residual_blocks = [
+        residual_block(res_input_shape, 128, 3, 1, name="0"),
+        residual_block(res_input_shape, 128, 3, 1, name="1"),
+        residual_block(res_input_shape, 128, 3, 1, name="2"),
+        residual_block(res_input_shape, 128, 3, 1, name="3"),
+        residual_block(res_input_shape, 128, 3, 1, name="4"),
+    ]
+
+    expand_blocks = [
+        expand(input_shape=res_input_shape, name="0", filters=64, size=3, strides=2),
+        expand(input_shape=calc_next_conv_dims(res_input_shape, 64, 2 ** 1), name="1", filters=32, size=3, strides=2),
+    ]
+
+    num_style_parameters = (sum(map(lambda block_w_params: block_w_params[1], residual_blocks)) +
+                            sum(map(lambda block_w_params: block_w_params[1], expand_blocks)))
 
     inputs = {'content': tf.keras.layers.Input(shape=input_shape),
               'style_params': tf.keras.layers.Input(shape=(num_style_parameters,))}
-    content_input, style_params = (inputs['content'], inputs['style_params'])
+    content_input, style_params_input = (inputs['content'], inputs['style_params'])
 
-    x = tf.keras.Sequential(layers=[
-        contract(32, 9, 1, name="0"),
-        contract(64, 3, 2, name="1"),
-        contract(128, 3, 2, name="2"),
-    ], name="encoder")(content_input)
+    with tf.name_scope("expand_style_params"):
+        style_params_input = tf.expand_dims(style_params_input, -2, name="expand_style_params_0")
+        style_params_input = tf.expand_dims(style_params_input, -2, name="expand_style_params_1")
 
-    residual_block_input_shape = (input_shape[0] // 4, input_shape[1] // 4, 128)
-    x = tf.keras.Sequential(layers=[
-        residual_block(residual_block_input_shape, 128, 3, 1, name="0"),
-        residual_block(residual_block_input_shape, 128, 3, 1, name="1"),
-        residual_block(residual_block_input_shape, 128, 3, 1, name="2"),
-        residual_block(residual_block_input_shape, 128, 3, 1, name="3"),
-        residual_block(residual_block_input_shape, 128, 3, 1, name="4"),
-    ], name="bottleneck")(x)
+    style_params_stack = StyleParamStack(style_params_input)
 
-    next_decoder_filters_num = residual_block_input_shape[-1]
-    style_norm_param_lower_bound = 0
-    for i, decoder_layer_spec in enumerate(decoder_layer_specs):
-        style_norm_scale_upper_bound = style_norm_param_lower_bound + decoder_layer_spec["filters"]
-        style_norm_offset_upper_bound = style_norm_scale_upper_bound + decoder_layer_spec["filters"]
-        scale = style_params[:, style_norm_param_lower_bound:style_norm_scale_upper_bound]
-        offset = style_params[:, style_norm_scale_upper_bound:style_norm_offset_upper_bound]
-        scale, offset = tf.expand_dims(scale, -2, name="expand_scale_0"), tf.expand_dims(offset, -2,
-                                                                                         name="expand_offset_0")
-        scale, offset = tf.expand_dims(scale, -2, name="expand_scale_1"), tf.expand_dims(offset, -2,
-                                                                                         name="expand_offset_1")
-        style_norm_param_lower_bound = style_norm_offset_upper_bound
+    x = content_input
+    for contract_block in contract_blocks:
+        x = contract_block(x)
 
-        input_shape = (
-        residual_block_input_shape[0] * 2 ** i, residual_block_input_shape[1] * 2 ** i, next_decoder_filters_num)
-        expand_layer = expand(input_shape=input_shape, name=i,
-                              filters=decoder_layer_spec["filters"],
-                              size=decoder_layer_spec["size"],
-                              strides=decoder_layer_spec["strides"])
-        x = expand_layer({
-            "inputs": x,
-            "scale": scale,
-            "bias": offset,
-        })
-        next_decoder_filters_num = decoder_layer_spec["filters"]
+    for residual_block_layer, num_style_features in residual_blocks:
+        residual_block_input = style_params_stack.make_content_and_style_input(x, num_style_features)
+        x = residual_block_layer(residual_block_input)
+
+    for expand_block, num_style_features in expand_blocks:
+        expand_block_input = style_params_stack.make_content_and_style_input(x, num_style_features)
+        x = expand_block(expand_block_input)
 
     x = tf.keras.Sequential(layers=[
         tf.keras.layers.Conv2DTranspose(filters=3, kernel_size=1, strides=1, padding='same',

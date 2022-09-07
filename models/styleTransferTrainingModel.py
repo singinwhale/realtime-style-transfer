@@ -12,7 +12,7 @@ def make_style_transfer_training_model(input_shape,
                                        style_transfer_factory_func: typing.Callable[[], tf.keras.Model],
                                        style_loss_func_factory_func: typing.Callable[
                                            [], typing.Callable[[typing.Dict, tf.Tensor], typing.Dict]],
-                                       name="StyleTransferModel"):
+                                       name="StyleTransferTrainingModel"):
     inputs = {'content': tf.keras.layers.Input(shape=input_shape['content']),
               'style': tf.keras.layers.Input(shape=input_shape['style'])}
     content_input, style_input = (inputs['content'], inputs['style'])
@@ -21,7 +21,6 @@ def make_style_transfer_training_model(input_shape,
     style_predictor = style_predictor_factory_func(num_style_parameters)
     style_params = style_predictor(style_input)
 
-    log.debug(f"style_params: {style_params.shape}")
     stylized_image = style_transfer_model({
         "content": content_input,
         "style_params": style_params,

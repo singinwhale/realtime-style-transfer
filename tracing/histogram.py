@@ -6,7 +6,7 @@ log = logging.getLogger(__name__)
 log.setLevel(logging.INFO)
 
 
-def writeModelHistogramSummary(model, step=None):
+def write_model_histogram_summary(model, step=None):
     counter = 0
 
     def descend_to_layer(layer: tf.keras.layers.Layer, path):
@@ -35,7 +35,7 @@ class HistogramCallback(tf.keras.callbacks.Callback):
     model: tf.keras.models.Model
 
     def on_epoch_end(self, epoch, logs=None):
-        writeModelHistogramSummary(self.model, step=epoch)
+        write_model_histogram_summary(self.model, step=epoch)
 
     def on_predict_end(self, logs=None):
-        writeModelHistogramSummary(self.model, step=-1)
+        write_model_histogram_summary(self.model, step=-1)
