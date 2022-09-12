@@ -22,6 +22,15 @@ style_debug_image_dir = style_target_dir / 'debug_images'
 content_debug_image_dir = content_target_dir / 'debug_images'
 manifest_filepath = style_target_dir / 'wikiart_scraped.csv'
 
+BLACKLISTED_IMAGE_HASHES = [
+    "0", "0", "0", "0", "0", "0", "0", "0", "0", "0", "0", "0", "0", "0", "0", "0", "0", "0", "0", "0", "0", "0", "0",
+    "0", "0", "0", "0", "0", "0", "0", "0", "0", "0", "0", "0", "0", "0", "0", "0", "0", "0", "0", "0", "0", "0", "0",
+    "0", "0", "0", "0", "0", "0", "0", "0", "0", "0", "0", "0", "0",
+    "0",
+]
+
+NUM_WIKIART_IMAGES = 124170
+
 
 def test_manifest_exists():
     return manifest_filepath.exists()
@@ -34,7 +43,7 @@ def test_images_exist(thorough=False):
     start = time.time_ns()
     filecount = len(list(style_image_dir.iterdir()))
     log.info(f"took {(time.time_ns() - start) * 1e-6}ms to count {filecount} images")
-    return filecount == 124110
+    return filecount == NUM_WIKIART_IMAGES - len(BLACKLISTED_IMAGE_HASHES)
 
 
 def test_complete():
@@ -75,8 +84,8 @@ async def download_images_async(progress_hook: typing.Callable[[str, Path, int, 
 
     import asyncio
 
-    httpx_log = tracing.getLogger('httpx._client')
-    httpx_log.setLevel(tracing.INFO)
+    httpx_log = logging.getLogger('httpx._client')
+    httpx_log.setLevel(logging.INFO)
 
     if not style_image_dir.exists():
         import os
@@ -155,6 +164,7 @@ def get_dataset(shapes, batch_size, **kwargs) -> (tf.data.Dataset, tf.data.Datas
     init_dataset()
 
     filepaths = sorted(map(lambda image_manifest: image_manifest_to_filepath(image_manifest), _read_dataset_manifest()))
+    filepaths = list(filter(lambda path: path.stem not in BLACKLISTED_IMAGE_HASHES, filepaths))
     if 'seed' in kwargs:
         rng = random.Random(x=kwargs['seed'])
         rng.shuffle(filepaths)
@@ -263,3 +273,4 @@ def image_manifest_to_filepath(image_manifest):
     image_file_basename = hashlib.sha1(str(image_manifest).encode('utf-8'), usedforsecurity=False).hexdigest()
     image_target_path = (style_image_dir / image_file_basename).with_suffix('.jpg')
     return image_target_path
+
