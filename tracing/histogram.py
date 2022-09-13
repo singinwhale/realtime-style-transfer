@@ -23,6 +23,7 @@ def write_model_histogram_summary(model, step=None):
             for i, weights in enumerate(layer.get_weights()):
                 log.debug(f"Writing layer {layer_path}/{i} for weights {weights.shape}")
                 tf.summary.histogram(f"{layer_path}/{i}", weights, step)
+                tf.summary.histogram(f"{layer_path}/{i}", weights, step)
                 counter = counter + 1
 
     for layer in model.layers:
