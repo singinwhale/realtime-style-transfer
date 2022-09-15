@@ -56,7 +56,7 @@ class ConditionalInstanceNormalization(tf.keras.layers.Layer):
         }
 
 
-def expand(input_shape, filters, size, strides, name, apply_dropout=False):
+def expand(input_shape, filters, size, strides, name, activation=tf.nn.relu):
     name = f"expand_{name}"
     initializer = tf.random_normal_initializer(0., 0.02)
 
@@ -78,15 +78,12 @@ def expand(input_shape, filters, size, strides, name, apply_dropout=False):
     }
     result = ConditionalInstanceNormalization(filters, 0)(instance_norm_args)
 
-    if apply_dropout:
-        result = tf.keras.layers.Dropout(0.5)(result)
-
-    result = tf.keras.layers.ReLU()(result)
+    result = tf.keras.layers.Activation(activation)(result)
 
     return tf.keras.Model(inputs, result, name=name), num_style_params
 
 
-def residual_block(input_shape, filters, size, strides, name, apply_dropout=False):
+def residual_block(input_shape, filters, size, strides, name):
     name = f"residual_block_{name}"
     initializer = tf.random_uniform_initializer(0., 0.05)
     content_input = tf.keras.Input(shape=input_shape, name="content_input")
@@ -112,7 +109,7 @@ def residual_block(input_shape, filters, size, strides, name, apply_dropout=Fals
     return (tf.keras.models.Model(inputs, out, name=f"{name}"), num_style_params)
 
 
-def contract(input_shape, filters, size, strides, name, apply_dropout=False) -> tf.keras.Sequential:
+def contract(input_shape, filters, size, strides, name) -> tf.keras.Sequential:
     name = f"contract_{name}"
     initializer = tf.random_normal_initializer(0., 0.02)
 
@@ -126,9 +123,6 @@ def contract(input_shape, filters, size, strides, name, apply_dropout=False) -> 
                                name=f"{name}_conv")(inputs)
 
     x = tf.keras.layers.BatchNormalization()(x)
-
-    if apply_dropout:
-        x = tf.keras.layers.Dropout(0.5)(x)
 
     result = tf.keras.layers.ReLU()(x)
 
@@ -160,6 +154,8 @@ def create_style_transfer_model(input_shape,
     expand_blocks = [
         expand(input_shape=res_input_shape, name="0", filters=64, size=3, strides=2),
         expand(input_shape=calc_next_conv_dims(res_input_shape, 64, 2 ** 1), name="1", filters=32, size=3, strides=2),
+        expand(input_shape=calc_next_conv_dims(res_input_shape, 32, 2 ** 2), name="2", filters=3, size=9, strides=1,
+               activation=tf.nn.sigmoid),
     ]
 
     num_style_parameters = (sum(map(lambda block_w_params: block_w_params[1], residual_blocks)) +
@@ -186,13 +182,6 @@ def create_style_transfer_model(input_shape,
     for expand_block, num_style_features in expand_blocks:
         expand_block_input = style_params_stack.make_content_and_style_input(x, num_style_features)
         x = expand_block(expand_block_input)
-
-    x = tf.keras.Sequential(layers=[
-        tf.keras.layers.Conv2DTranspose(filters=3, kernel_size=1, strides=1, padding='same',
-                                        kernel_initializer=tf.random_uniform_initializer(0, 0.02),
-                                        bias_initializer=tf.constant_initializer(0.0)),
-        tf.keras.layers.Activation(tf.nn.sigmoid),
-    ], name="Top")(x)
 
     model = tf.keras.Model(inputs=inputs, outputs=x, name=name)
     return model, num_style_parameters

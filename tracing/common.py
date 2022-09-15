@@ -5,6 +5,7 @@ import tensorflow as tf
 import logging
 
 log = logging.getLogger(__name__)
+log.setLevel(logging.INFO)
 
 
 def visitModelLayers(model, only_trainable, visitor_func: typing.Callable[[tf.keras.layers.Layer, str], None]):
@@ -22,6 +23,7 @@ def visitModelLayers(model, only_trainable, visitor_func: typing.Callable[[tf.ke
                 descend_to_layer(sub_layer, layer_path)
         else:
             visitor_func(layer, layer_path)
+            counter += 1
 
     for layer in model.layers:
         descend_to_layer(layer, "")

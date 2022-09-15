@@ -8,6 +8,7 @@ log = logging.getLogger(__name__)
 
 def get_gram_matrix_model(input_spec):
     inputs = tf.keras.Input(input_spec)
+    inputs = tf.cast(inputs, tf.float32)
     result = tf.linalg.einsum('bijc,bijd->bcd', inputs, inputs)
     input_shape = tf.shape(inputs)
     num_locations = tf.cast(input_shape[1] * input_shape[2], tf.float32)
@@ -41,6 +42,9 @@ class StyleLossModelBase(tf.keras.models.Model):
         self.content_layers = None
         self.style_layers = None
         self.feature_extractor = None
+        self.content_loss_factor = 1
+        self.style_loss_factor = 1
+        self.total_variation_loss_factor = 1
 
     def call(self, inputs, **kwargs):
         outputs = self.feature_extractor(inputs)
@@ -50,8 +54,8 @@ class StyleLossModelBase(tf.keras.models.Model):
 
         # style_dict = {style_name: value for style_name, value in zip(self.style_layers, style_outputs)}
 
-        content_layers = self.content_layers + self.style_layers
-        style_layers = self.content_layers + self.style_layers
+        content_layers = self.content_layers
+        style_layers = self.style_layers
 
         content_dict = {content_layer_name: outputs[content_layer_name] for content_layer_name in content_layers}
         style_dict = {style_layer_name: outputs[style_layer_name] for style_layer_name in style_layers}
@@ -65,27 +69,36 @@ class StyleLossModelVGG(StyleLossModelBase):
     Build a model that returns the style and content tensors.
     """
 
-    def __init__(self):
+    def __init__(self, input_shape):
         super().__init__(name='StyleLossModelVGG')
 
         # style_layers = ['block1_conv1', 'block2_conv1', 'block3_conv1', 'block4_conv1', 'block5_conv1']
-        style_layers = ['block1_pool', 'block2_pool', 'block3_pool', 'block4_pool']
-        content_layers = ['block5_pool']
+        style_layers = ['block1_conv2', 'block2_conv2', 'block3_conv3', 'block4_conv3']
+        content_layers = ['block5_conv3']
 
         # Load our model. Load pretrained VGG, trained on ImageNet data
         vgg = tf.keras.applications.VGG16(include_top=False, weights='imagenet')
         vgg.trainable = False
 
+        channels = input_shape[-1]
+        inputs = tf.keras.Input(shape=input_shape, dtype=tf.float32)
+        x = inputs
+        # x = tf.cast(inputs, tf.float16)
+        # x = tf.keras.layers.AveragePooling2D(4)(x)
         outputs = {name: vgg.get_layer(name).output for name in (content_layers + style_layers)}
-
         self.feature_extractor = tf.keras.Model([vgg.input], outputs)
         self.feature_extractor.trainable = False
+
+        x = self.feature_extractor(x)
+
+        self.feature_extractor = tf.keras.Model(inputs, x)
 
         self.style_layers = style_layers
         self.content_layers = content_layers
         self.num_style_layers = len(style_layers)
-        self.content_loss_factor = 1e-4
-        self.style_loss_factor = 1e-6
+        self.content_loss_factor = 1e-3
+        self.style_loss_factor = 0.5e-8
+        self.total_variation_loss_factor = 1e-1
 
     def call(self, inputs, **kwargs):
         inputs = inputs * 255.0
@@ -116,7 +129,8 @@ class StyleLossModelEfficientNet(StyleLossModelBase):
 
         # Load our model. Load pretrained VGG, trained on ImageNet data
         efficientnet = tf.keras.applications.efficientnet.EfficientNetB3(include_top=False,
-                                                                         input_shape=input_shape)
+                                                                         input_shape=input_shape,
+                                                                         include_preprocessing=False)
         efficientnet.trainable = False
 
         outputs = {name: efficientnet.get_layer(name).output for name in output_layer_names}
@@ -129,11 +143,10 @@ class StyleLossModelEfficientNet(StyleLossModelBase):
         self.num_style_layers = len(style_layer_names)
 
     def call(self, inputs, **kwargs):
-        """Expects float input in [0,1]
-        :param **kwargs:
+        """Expects float input in [0,1] but rescales it to [-1, 1]
         """
-        inputs = inputs * 255.0
-        return super().call(inputs, **kwargs)
+        x = tf.keras.layers.Rescaling(2.0, -1.0)(inputs)
+        return super().call(x, **kwargs)
 
 
 class StyleLossModelMobileNet(StyleLossModelBase):
@@ -153,7 +166,8 @@ class StyleLossModelMobileNet(StyleLossModelBase):
         ]
         output_layer_names = style_layer_names + content_layer_names
 
-        mobile_net = tf.keras.applications.MobileNetV3Small(include_top=False, input_shape=input_shape)
+        mobile_net = tf.keras.applications.MobileNetV3Small(include_top=False, input_shape=input_shape,
+                                                            include_preprocessing=False)
         mobile_net.trainable = False
 
         outputs = {name: mobile_net.get_layer(name).output for name in output_layer_names}
@@ -164,14 +178,15 @@ class StyleLossModelMobileNet(StyleLossModelBase):
         self.style_layers = style_layer_names
         self.content_layers = content_layer_names
         self.num_style_layers = len(style_layer_names)
-        self.content_loss_factor = 1.5e-2
-        self.style_loss_factor = 1e-1
+        self.content_loss_factor = 1e-4
+        self.style_loss_factor = 0.5e-3
+        self.total_variation_loss_factor = 1e-3
 
     def call(self, inputs, **kwargs):
-        """Expects float input in [0,1]
+        """Expects float input in [0,1] but rescales it to [-1, 1]
         """
-        inputs = inputs * 255.0
-        return super().call(inputs)
+        x = tf.keras.layers.Rescaling(2.0, -1.0)(inputs)
+        return super().call(x)
 
 
 class StyleLossModelDummy(StyleLossModelBase):
@@ -218,18 +233,25 @@ def make_style_loss_function(loss_model: keras.Model, input_shape, output_shape)
     output_feature_values: tf.Tensor = loss_data_prediction['content']
     output_style_features: tf.Tensor = loss_data_prediction['style']
 
-    feature_loss = tf.reduce_mean([tf.nn.l2_loss((out_value - in_value) * loss_model.content_loss_factor) for (input_layer, in_value), (out_layer, out_value) in
-                                   zip(input_feature_values.items(), output_feature_values.items())])
+    feature_loss = tf.reduce_mean([
+        tf.nn.l2_loss((tf.cast(out_value, tf.float32) - tf.cast(in_value, tf.float32))) * loss_model.content_loss_factor
+        for (input_layer, in_value), (out_layer, out_value) in
+        zip(input_feature_values.items(), output_feature_values.items())
+    ])
 
     gram_matrix_model = get_gram_matrix_model((None, None, None))
-    style_loss = tf.reduce_mean([tf.nn.l2_loss((gram_matrix_model(out_value) - gram_matrix_model(in_value)) * loss_model.style_loss_factor) for
-                                 (input_layer, in_value), (out_layer, out_value) in
-                                 zip(input_style_features.items(), output_style_features.items())])
+    style_loss = tf.reduce_mean([
+        tf.nn.l2_loss((gram_matrix_model(out_value) - gram_matrix_model(in_value))) * loss_model.style_loss_factor
+        for (input_layer, in_value), (out_layer, out_value) in
+        zip(input_style_features.items(), output_style_features.items())
+    ])
 
-    total_variation_loss = tf.image.total_variation(input_prediction, 'total_variation_loss')
+    total_variation_loss = tf.image.total_variation(input_prediction,
+                                                    'total_variation_loss') * loss_model.total_variation_loss_factor
 
     output = {
-        "loss": feature_loss + style_loss + total_variation_loss,
+        "loss": tf.cast(feature_loss, tf.float32) + tf.cast(style_loss, tf.float32) + tf.cast(total_variation_loss,
+                                                                                              tf.float32),
         "feature_loss": feature_loss,
         "style_loss": style_loss,
         "total_variation_loss": total_variation_loss,

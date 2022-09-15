@@ -197,11 +197,12 @@ def get_dataset(shapes, batch_size, **kwargs) -> (tf.data.Dataset, tf.data.Datas
         training_dataset = training_dataset.cache(filename=str(cache_dir / "wikiart_training_dataset"))
         validation_dataset = validation_dataset.cache(filename=str(cache_dir / "wikiart_validation_dataset"))
 
-        log.info(f"Caching datasets into {cache_dir}. This could take a while")
         for name, dataset in {"training_dataset": training_dataset, "validation_dataset": validation_dataset}.items():
-            # immediately cache everything
-            for _ in tqdm.tqdm(iterable=dataset, desc=name):
-                pass
+            if not (cache_dir / f"wikiart_{name}.index").exists():
+                log.info(f"Caching {name} into {cache_dir}. This could take a while")
+                # immediately cache everything
+                for _ in tqdm.tqdm(iterable=dataset, desc=name):
+                    pass
 
     return training_dataset, validation_dataset
 
