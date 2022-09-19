@@ -23,7 +23,7 @@ def predict_datapoint(validation_log_datapoint, training_log_datapoint, model: t
 
     content_plot, style_plot, valiation_prediction_plot, training_prediction_plot = subplots.flatten()
     content_plot.imshow(tf.squeeze(validation_log_datapoint['content']))
-    style_plot.imshow(tf.squeeze(validation_log_datapoint['style']))
+    style_plot.imshow(tf.squeeze(validation_log_datapoint['style'][:, 0, ...]))
     valiation_prediction_plot.imshow(tf.squeeze(model.predict(validation_log_datapoint, callbacks=callbacks)))
     training_prediction_plot.imshow(tf.squeeze(model.predict(training_log_datapoint, callbacks=callbacks)))
 

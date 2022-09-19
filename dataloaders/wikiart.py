@@ -2,9 +2,9 @@ import math
 import random
 import shutil
 import typing
-import unittest
 from pathlib import Path
 import csv
+import sys
 
 import tqdm
 
@@ -23,10 +23,9 @@ content_debug_image_dir = content_target_dir / 'debug_images'
 manifest_filepath = style_target_dir / 'wikiart_scraped.csv'
 
 BLACKLISTED_IMAGE_HASHES = [
+    "a85d4a1f4cc89ff410a98160000a64749b0920ee", "0", "0", "0", "0", "0", "0", "0", "0", "0", "0", "0", "0", "0", "0",
     "0", "0", "0", "0", "0", "0", "0", "0", "0", "0", "0", "0", "0", "0", "0", "0", "0", "0", "0", "0", "0", "0", "0",
-    "0", "0", "0", "0", "0", "0", "0", "0", "0", "0", "0", "0", "0", "0", "0", "0", "0", "0", "0", "0", "0", "0", "0",
-    "0", "0", "0", "0", "0", "0", "0", "0", "0", "0", "0", "0", "0",
-    "0",
+    "0", "0", "0", "0", "0", "0", "0", "0", "0", "0", "0", "0", "0", "0", "0", "0", "0", "0", "0", "0", "0", "0",
 ]
 
 NUM_WIKIART_IMAGES = 124170
@@ -170,23 +169,23 @@ def get_dataset(shapes, batch_size, **kwargs) -> (tf.data.Dataset, tf.data.Datas
         rng.shuffle(filepaths)
 
     validation_split_index = math.floor(len(filepaths) * 0.8)
-    shape_without_batches = shapes
+    shapes_without_batches = shapes
 
     training_style_dataset = common.image_dataset_from_filepaths(filepaths[:validation_split_index],
-                                                                 shape_without_batches['style'])
+                                                                 shapes_without_batches['style'])
     validation_style_dataset = common.image_dataset_from_filepaths(filepaths[validation_split_index:],
-                                                                   shape_without_batches['style'])
+                                                                   shapes_without_batches['style'])
 
     training_content_dataset, validation_content_dataset = \
-        common.load_training_and_validation_dataset_from_directory(content_image_dir, shape_without_batches['content'],
+        common.load_training_and_validation_dataset_from_directory(content_image_dir, shapes_without_batches['content'],
                                                                    **kwargs)
 
     training_dataset = common.pair_up_content_and_style_datasets(content_dataset=training_content_dataset,
                                                                  style_dataset=training_style_dataset,
-                                                                 shapes=shape_without_batches)
+                                                                 shapes=shapes_without_batches)
     validation_dataset = common.pair_up_content_and_style_datasets(content_dataset=validation_content_dataset,
                                                                    style_dataset=validation_style_dataset,
-                                                                   shapes=shape_without_batches)
+                                                                   shapes=shapes_without_batches)
 
     if batch_size is not None:
         training_dataset = training_dataset.batch(batch_size)
@@ -274,4 +273,3 @@ def image_manifest_to_filepath(image_manifest):
     image_file_basename = hashlib.sha1(str(image_manifest).encode('utf-8'), usedforsecurity=False).hexdigest()
     image_target_path = (style_image_dir / image_file_basename).with_suffix('.jpg')
     return image_target_path
-

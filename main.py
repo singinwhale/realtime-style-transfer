@@ -13,8 +13,12 @@ import tensorflow as tf
 
 physical_devices: typing.List[tf.config.PhysicalDevice] = tf.config.list_physical_devices('GPU')
 try:
-    tf.config.experimental.set_memory_growth(physical_devices[0], True)
-except:
+    # tf.config.experimental.set_memory_growth(physical_devices[0], True)
+    tf.config.experimental.set_virtual_device_configuration(
+        physical_devices[0],
+        [tf.config.experimental.VirtualDeviceConfiguration(memory_limit=23 * 1024)]
+    )
+finally:
     # Invalid device or cannot modify virtual devices once initialized.
     pass
 
@@ -42,8 +46,10 @@ from tracing.histogram import HistogramCallback, write_model_histogram_summary
 from tracing.gradients import GradientsCallback
 
 resolution_divider = 2
+num_styles = 1
 input_shape = {'content': (960 // resolution_divider, 1920 // resolution_divider, 3),
-               'style': (960 // resolution_divider, 1920 // resolution_divider, 3)}
+               'style_weights': (960 // resolution_divider, 1920 // resolution_divider, num_styles - 1),
+               'style': (num_styles, 960 // resolution_divider, 1920 // resolution_divider, 3)}
 output_shape = (960 // resolution_divider, 1920 // resolution_divider, 3)
 
 # training_dataset, validation_dataset = wikiart.get_dataset_debug(input_shape, batch_size=4)
@@ -71,9 +77,10 @@ with summary_writer.as_default() as summary:
     style_transfer_training_model = styleTransferTrainingModel.make_style_transfer_training_model(
         input_shape,
         style_predictor_factory_func=lambda num_top_parameters: stylePrediction.create_style_prediction_model(
-            input_shape['style'], stylePrediction.StyleFeatureExtractor.MOBILE_NET, num_top_parameters
+            input_shape['style'][1:], stylePrediction.StyleFeatureExtractor.MOBILE_NET, num_top_parameters
         ),
-        style_transfer_factory_func=lambda: styleTransfer.create_style_transfer_model(input_shape['content']),
+        style_transfer_factory_func=lambda: styleTransfer.create_style_transfer_model(input_shape['content'],
+                                                                                      num_styles=num_styles),
         style_loss_func_factory_func=lambda: styleLoss.make_style_loss_function(style_loss_model, input_shape,
                                                                                 output_shape),
     )
@@ -82,7 +89,10 @@ with summary_writer.as_default() as summary:
 
     latest_epoch_weights_path = log_root_dir / "2022-09-14-19-01-08.839135" / "checkpoints" / "latest_epoch_weights"
     log.info(f"Loading weights from {latest_epoch_weights_path}")
-    style_transfer_training_model.training.load_weights(latest_epoch_weights_path)
+    try:
+        style_transfer_training_model.training.load_weights(latest_epoch_weights_path)
+    except Exception as e:
+        log.warning(f"Could not load weights: {e}")
 
     summary_text = capture_model_summary(style_transfer_training_model.training)
     tf.summary.text('summary', f"```\n{summary_text}\n```", -1)

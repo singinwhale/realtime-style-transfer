@@ -19,20 +19,16 @@ checkpoint_path:Path = args.checkpoint_path
 outpath: Path = args.outpath
 
 image_shape = (960, 1920, 3)
+num_styles = 2
 
 log = logging.getLogger()
 
 tf.config.set_visible_devices([], 'GPU')
 
-from models import styleTransfer, stylePrediction, styleLoss, styleTransferTrainingModel
+from models import styleTransfer, stylePrediction, styleLoss, styleTransferInferenceModel
 
 input_shape = {'content': image_shape, 'style': image_shape}
 output_shape = image_shape
-
-
-def build_style_loss_function():
-    style_loss_model = styleLoss.StyleLossModelMobileNet(output_shape)
-    return styleLoss.make_style_loss_function(style_loss_model, input_shape, output_shape)
 
 
 def build_style_prediction_model(batchnorm_layers):
@@ -54,22 +50,21 @@ def build_style_transfer_model():
     return transfer_model_data
 
 
-style_transfer_models = styleTransferTrainingModel.make_style_transfer_training_model(
+style_transfer_models = styleTransferInferenceModel.make_style_transfer_inference_model(
     input_shape,
     build_style_prediction_model,
-    build_style_transfer_model,
-    build_style_loss_function
+    build_style_transfer_model
 )
 
 element = {
     'content': tf.convert_to_tensor(np.zeros((1, 960, 1920, 3))),
-    'style': tf.convert_to_tensor(np.zeros((1, 960, 1920, 3))),
+    'style': tf.convert_to_tensor(np.zeros((1, num_styles, 960, 1920, 3))),
 }
 log.info(f"Running inference to build model...")
 # call once to build models
-style_transfer_models.training(element)
+style_transfer_models.inference(element)
 log.info(f"Loading weights...")
-style_transfer_models.training.load_weights(filepath=str(checkpoint_path))
+style_transfer_models.inference.load_weights(filepath=str(checkpoint_path))
 
 log.info(f"Saving model...")
 transfer_path = outpath.with_suffix(".transfer.tf")

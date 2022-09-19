@@ -13,9 +13,9 @@ class SummaryImageCallback(keras.callbacks.Callback):
 
     def on_epoch_begin(self, epoch, logs=None):
         if epoch == 0:
-            tf.summary.image('validation_style', self.validation_datapoint['style'], step=0)
+            tf.summary.image('validation_style', self.validation_datapoint['style'][:, 0, ...], step=0)
             tf.summary.image('validation_content', self.validation_datapoint['content'], step=0)
-            tf.summary.image('training_style', self.training_datapoint['style'], step=0)
+            tf.summary.image('training_style', self.training_datapoint['style'][:, 0, ...], step=0)
             tf.summary.image('training_content', self.training_datapoint['content'], step=0)
             self.write_sample(0)
 

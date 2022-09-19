@@ -33,6 +33,7 @@ def _preprocess_image(image, shape):
 
 
 def _load_image_from_file(filepath, shape):
+    assert len(shape) == 3, "this function does not take care of special shapes"
     image = tf.keras.utils.load_img(path=filepath, interpolation="lanczos",
                                     color_mode='rgb' if shape[2] == 3 else 'rgba')
     image = _preprocess_image(image, (shape[1], shape[0], shape[2]))
@@ -58,24 +59,26 @@ def _load_images_from_directory(image_dir: Path, shape, **kwargs) -> typing.Gene
                 log.debug(f"Ignoring {filepath} because it has an invalid suffix")
                 continue
 
-            image = _load_image_from_file(filepath, shape)
+            image = _load_image_from_file(filepath, shape[-3:])
             yield image
 
 
-def _image_to_tensor(image) -> tf.Tensor:
+def _image_to_tensor(image, shape) -> tf.Tensor:
     tensor: np.ndarray = tf.keras.utils.img_to_array(image, 'channels_last', dtype="float32")
     tensor = tensor / 255.0
     tensor: tf.Tensor = tf.convert_to_tensor(tensor)
+    tensor = tf.reshape(tensor, shape)
     return tensor
 
 
 def image_dataset_from_directory(image_dir: Path, shape, **kwargs):
     def generate_image_tensors():
         for image in _load_images_from_directory(image_dir, shape, **kwargs):
-            yield _image_to_tensor(image)
+            tensor = _image_to_tensor(image, shape)
+            yield tensor
 
     dataset = tf.data.Dataset.from_generator(generate_image_tensors,
-                                             output_signature=tf.TensorSpec((shape[0], shape[1], 3)))
+                                             output_signature=tf.TensorSpec(shape))
     return dataset
 
 
@@ -83,25 +86,27 @@ def image_dataset_from_filepaths(filepaths, shape) -> tf.data.Dataset:
     def generate_image_tensors():
         for imagepath in filepaths:
             try:
-                image = _load_image_from_file(imagepath, shape)
-                yield _image_to_tensor(image)
+                image = _load_image_from_file(imagepath, shape[-3:])
+                tensor = _image_to_tensor(image, shape)
+                yield tensor
             except Exception as e:
                 log.warning(f"Could not read image {imagepath}: {e}")
 
     dataset = tf.data.Dataset.from_generator(generate_image_tensors,
-                                             output_signature=tf.TensorSpec((shape[0], shape[1], 3)))
+                                             output_signature=tf.TensorSpec(shape))
     return dataset
 
 
 def pair_up_content_and_style_datasets(content_dataset, style_dataset, shapes) -> tf.data.Dataset:
     def _pair_up_dataset():
         for i, (content, style) in enumerate(zip(content_dataset, style_dataset)):
-            datapoint = {'content': content, 'style': style}
+            datapoint = {'content': content, 'style_weights': tf.zeros(shapes['style_weights']), 'style': style}
             yield datapoint
 
     paired_dataset = tf.data.Dataset.from_generator(_pair_up_dataset, output_signature={
-        'content': tf.TensorSpec(shape=shapes['content'], dtype=tf.dtypes.float32, name=None),
-        'style': tf.TensorSpec(shape=shapes['style'], dtype=tf.dtypes.float32, name=None)
+        'content': tf.TensorSpec(shape=shapes['content'], dtype=tf.dtypes.float32, name="content_data"),
+        'style_weights': tf.TensorSpec(shape=shapes['style_weights'], dtype=tf.dtypes.float32, name="style_weights_data"),
+        'style': tf.TensorSpec(shape=shapes['style'], dtype=tf.dtypes.float32, name="style_data")
     })
     return paired_dataset
 

@@ -86,7 +86,7 @@ class StyleLossModelVGG(StyleLossModelBase):
         # x = tf.cast(inputs, tf.float16)
         # x = tf.keras.layers.AveragePooling2D(4)(x)
         outputs = {name: vgg.get_layer(name).output for name in (content_layers + style_layers)}
-        self.feature_extractor = tf.keras.Model([vgg.input], outputs)
+        self.feature_extractor = tf.keras.Model([vgg.input], outputs, name="VGG16LayerAccessor")
         self.feature_extractor.trainable = False
 
         x = self.feature_extractor(x)
@@ -135,7 +135,7 @@ class StyleLossModelEfficientNet(StyleLossModelBase):
 
         outputs = {name: efficientnet.get_layer(name).output for name in output_layer_names}
 
-        self.feature_extractor = tf.keras.Model([efficientnet.input], outputs)
+        self.feature_extractor = tf.keras.Model([efficientnet.input], outputs, name="EfficientNetLayerAccessor")
         self.feature_extractor.trainable = False
 
         self.style_layers = style_layer_names
@@ -172,7 +172,7 @@ class StyleLossModelMobileNet(StyleLossModelBase):
 
         outputs = {name: mobile_net.get_layer(name).output for name in output_layer_names}
 
-        self.feature_extractor = tf.keras.Model([mobile_net.input], outputs)
+        self.feature_extractor = tf.keras.Model([mobile_net.input], outputs, name="MobileNetV3LayerAccessor")
         self.feature_extractor.trainable = False
 
         self.style_layers = style_layer_names
@@ -208,7 +208,7 @@ class StyleLossModelDummy(StyleLossModelBase):
             conv2.name
         ]
 
-        self.feature_extractor = tf.keras.Model(inputs, [output1, output2])
+        self.feature_extractor = tf.keras.Model(inputs, [output1, output2], name="Dummy")
         self.feature_extractor.trainable = False
 
         self.num_style_layers = 1
@@ -216,8 +216,8 @@ class StyleLossModelDummy(StyleLossModelBase):
         self.style_loss_factor = 1
 
 
-def make_style_loss_function(loss_model: keras.Model, input_shape, output_shape):
-    loss_model.trainable = False
+def make_style_loss_function(loss_feature_extractor_model: keras.Model, input_shape, output_shape):
+    loss_feature_extractor_model.trainable = False
     inputs = {
         'content': tf.keras.Input(input_shape['content']),
         'style': tf.keras.Input(input_shape['style']),
@@ -225,29 +225,37 @@ def make_style_loss_function(loss_model: keras.Model, input_shape, output_shape)
     }
     # perform feature extraction on the input content image and diff it against the output features
     input_content, input_style, input_prediction = inputs['content'], inputs['style'], inputs['prediction']
-    loss_data_content = loss_model(input_content)
-    loss_data_style = loss_model(input_style)
-    loss_data_prediction = loss_model(input_prediction)
+
+    assert input_style.shape[1] == 1, \
+        f"Loss model does not support multiple styles. Found {input_style.shape[1]} in shape {input_style.shape}"
+
+    single_input_style = tf.squeeze(input_style, axis=1)
+
+    loss_data_content = loss_feature_extractor_model(input_content)
+    loss_data_style = loss_feature_extractor_model(single_input_style)
+    loss_data_prediction = loss_feature_extractor_model(input_prediction)
     input_feature_values: tf.Tensor = loss_data_content['content']
     input_style_features: tf.Tensor = loss_data_style['style']
     output_feature_values: tf.Tensor = loss_data_prediction['content']
     output_style_features: tf.Tensor = loss_data_prediction['style']
 
     feature_loss = tf.reduce_mean([
-        tf.nn.l2_loss((tf.cast(out_value, tf.float32) - tf.cast(in_value, tf.float32))) * loss_model.content_loss_factor
-        for (input_layer, in_value), (out_layer, out_value) in
-        zip(input_feature_values.items(), output_feature_values.items())
+        tf.nn.l2_loss((tf.cast(out_value, tf.float32) - tf.cast(in_value, tf.float32))) *
+        loss_feature_extractor_model.content_loss_factor
+        for (input_layer, in_value), (out_layer, out_value)
+        in zip(input_feature_values.items(), output_feature_values.items())
     ])
 
     gram_matrix_model = get_gram_matrix_model((None, None, None))
     style_loss = tf.reduce_mean([
-        tf.nn.l2_loss((gram_matrix_model(out_value) - gram_matrix_model(in_value))) * loss_model.style_loss_factor
-        for (input_layer, in_value), (out_layer, out_value) in
-        zip(input_style_features.items(), output_style_features.items())
+        tf.nn.l2_loss((gram_matrix_model(out_value) - gram_matrix_model(in_value))) *
+        loss_feature_extractor_model.style_loss_factor
+        for (input_layer, in_value), (out_layer, out_value)
+        in zip(input_style_features.items(), output_style_features.items())
     ])
 
     total_variation_loss = tf.image.total_variation(input_prediction,
-                                                    'total_variation_loss') * loss_model.total_variation_loss_factor
+                                                    'total_variation_loss') * loss_feature_extractor_model.total_variation_loss_factor
 
     output = {
         "loss": tf.cast(feature_loss, tf.float32) + tf.cast(style_loss, tf.float32) + tf.cast(total_variation_loss,
