@@ -1,3 +1,5 @@
+import shutil
+
 from tracing import logsetup
 
 import numpy as np
@@ -13,7 +15,7 @@ argparser.add_argument('--checkpoint_path', '-C', type=Path, required=True)
 argparser.add_argument('--outpath', '-o', type=Path, required=True)
 
 args = argparser.parse_args()
-checkpoint_path = args.checkpoint_path
+checkpoint_path:Path = args.checkpoint_path
 outpath: Path = args.outpath
 
 image_shape = (960, 1920, 3)
@@ -88,5 +90,9 @@ tf2onnx.convert.from_keras(style_transfer_models.transfer,
                                tf.TensorSpec((None,) + image_shape, name='content'),
                                tf.TensorSpec((None, num_style_norm_params), name='style_params')
                            ], output_path=transfer_path.with_suffix('.onnx'))
-
+log.info("Saving checkpoint...")
+checkpoint_outdir = outpath.with_suffix(".checkpoint")
+checkpoint_outdir.mkdir(exist_ok=True)
+for checkpoint_file in checkpoint_path.parent.glob(f"{checkpoint_path.stem}*"):
+    shutil.copy(checkpoint_file, checkpoint_outdir / Path("checkpoint").with_suffix(checkpoint_file.suffix))
 log.info("Done")
