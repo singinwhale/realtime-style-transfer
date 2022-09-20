@@ -191,6 +191,7 @@ def calc_next_conv_dims(initial, filters, mult) -> typing.Tuple:
 
 def create_style_transfer_model(input_shape, num_styles,
                                 name="StyleTransferModel"):
+    log.info(f"Using {num_styles} styles")
     contract_blocks = [
         contract(input_shape, 32, 9, 1, name="0"),
         contract(calc_next_conv_dims(input_shape, 32, 1), 64, 3, 2, name="1"),

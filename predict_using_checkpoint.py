@@ -1,3 +1,6 @@
+import matplotlib.pyplot as plt
+import numpy as np
+
 from tracing import logsetup
 
 from pathlib import Path
@@ -6,6 +9,8 @@ import logging
 import argparse
 
 from dataloaders import common
+
+log = logging.getLogger()
 
 argparser = argparse.ArgumentParser()
 argparser.add_argument('--checkpoint_path', '-C', type=Path, required=True)
@@ -23,15 +28,16 @@ image_shape = (960, 1920, 3)
 num_styles = len(style_image_paths)
 style_weights_shape = (960, 1920, num_styles - 1)
 
+style_weights = tf.convert_to_tensor(
+    np.triu(np.ones(style_weights_shape[0:2]), 480).reshape((1,) + style_weights_shape))
+# style_weights = tf.ones((1,) + style_weights_shape)
 element = {
     'content': common.image_dataset_from_filepaths([content_image_path], image_shape).batch(1).get_single_element(),
-    'style_weights': tf.linalg.band_part(tf.ones((1,) + style_weights_shape), 0, -1),
+    'style_weights': style_weights,
     'style': tf.stack(list(common.image_dataset_from_filepaths(style_image_paths, image_shape).batch(1)), axis=1)
 }
 
-log = logging.getLogger()
-
-from models import styleTransfer, stylePrediction, styleLoss, styleTransferInferenceModel
+from models import styleTransfer, stylePrediction, styleTransferInferenceModel
 from renderers.matplotlib import predict_datapoint
 
 input_shape = {
@@ -52,7 +58,8 @@ style_transfer_inference_model = styleTransferInferenceModel.make_style_transfer
 
 # call once to build model
 style_transfer_inference_model.inference(element)
-# style_transfer_inference_model.inference.load_weights(filepath=str(checkpoint_path))
+log.info(f"Loading weights from {checkpoint_path}")
+style_transfer_inference_model.inference.load_weights(filepath=str(checkpoint_path))
 predict_datapoint(element, element, style_transfer_inference_model.inference)
 
 # save result if required
