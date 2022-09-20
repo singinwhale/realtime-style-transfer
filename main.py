@@ -85,7 +85,7 @@ with summary_writer.as_default() as summary:
                                                                                 output_shape),
     )
 
-    style_transfer_training_model.training.compile(run_eagerly=False, optimizer='adam')
+    style_transfer_training_model.training.compile(run_eagerly=False)
 
     latest_epoch_weights_path = log_root_dir / "2022-09-14-19-01-08.839135" / "checkpoints" / "latest_epoch_weights"
     log.info(f"Loading weights from {latest_epoch_weights_path}")
@@ -102,7 +102,7 @@ with summary_writer.as_default() as summary:
     # write_model_histogram_summary(style_transfer_training_model.training, -1)
     # with tf.profiler.experimental.Profile(str(log_dir)) as profiler:
     style_transfer_training_model.training.fit(x=training_dataset.prefetch(5), validation_data=validation_dataset,
-                                               epochs=500,
+                                               epochs=3000,
                                                callbacks=[  # tensorboard_callback,
                                                    image_callback,
                                                    checkpoint_callback,

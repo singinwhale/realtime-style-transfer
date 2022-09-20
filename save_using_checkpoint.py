@@ -15,11 +15,13 @@ argparser.add_argument('--checkpoint_path', '-C', type=Path, required=True)
 argparser.add_argument('--outpath', '-o', type=Path, required=True)
 
 args = argparser.parse_args()
-checkpoint_path:Path = args.checkpoint_path
+checkpoint_path: Path = args.checkpoint_path
 outpath: Path = args.outpath
 
 image_shape = (960, 1920, 3)
 num_styles = 2
+style_weights_shape = (960, 1920, num_styles - 1)
+styles_shape = (num_styles,) + image_shape
 
 log = logging.getLogger()
 
@@ -27,14 +29,18 @@ tf.config.set_visible_devices([], 'GPU')
 
 from models import styleTransfer, stylePrediction, styleLoss, styleTransferInferenceModel
 
-input_shape = {'content': image_shape, 'style': image_shape}
+input_shape = {
+    'content': image_shape,
+    'style_weights': style_weights_shape,
+    'style': styles_shape,
+}
 output_shape = image_shape
 
 
 def build_style_prediction_model(batchnorm_layers):
     # return stylePrediction.StylePredictionModelMobileNet(input_shape, batchnorm_layers)
     return stylePrediction.create_style_prediction_model(
-        input_shape['style'],
+        image_shape,
         stylePrediction.StyleFeatureExtractor.MOBILE_NET,
         batchnorm_layers,
     )
@@ -45,7 +51,7 @@ num_style_norm_params = None
 
 def build_style_transfer_model():
     global num_style_norm_params
-    transfer_model_data = styleTransfer.create_style_transfer_model(input_shape['content'])
+    transfer_model_data = styleTransfer.create_style_transfer_model(input_shape['content'], num_styles)
     num_style_norm_params = transfer_model_data[1]
     return transfer_model_data
 
@@ -57,8 +63,9 @@ style_transfer_models = styleTransferInferenceModel.make_style_transfer_inferenc
 )
 
 element = {
-    'content': tf.convert_to_tensor(np.zeros((1, 960, 1920, 3))),
-    'style': tf.convert_to_tensor(np.zeros((1, num_styles, 960, 1920, 3))),
+    'content': tf.convert_to_tensor(np.zeros((1,) + image_shape)),
+    'style_weights': tf.convert_to_tensor(np.zeros((1,) + style_weights_shape)),
+    'style': tf.convert_to_tensor(np.zeros((1,) + styles_shape)),
 }
 log.info(f"Running inference to build model...")
 # call once to build models
@@ -83,7 +90,8 @@ log.info("Saving transfer model as ONNX...")
 tf2onnx.convert.from_keras(style_transfer_models.transfer,
                            [
                                tf.TensorSpec((None,) + image_shape, name='content'),
-                               tf.TensorSpec((None, num_style_norm_params), name='style_params')
+                               tf.TensorSpec((None, num_styles, num_style_norm_params), name='style_params'),
+                               tf.TensorSpec((None,) + style_weights_shape, name='style_weights'),
                            ], output_path=transfer_path.with_suffix('.onnx'))
 log.info("Saving checkpoint...")
 checkpoint_outdir = outpath.with_suffix(".checkpoint")
