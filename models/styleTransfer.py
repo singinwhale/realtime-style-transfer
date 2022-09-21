@@ -1,5 +1,6 @@
 import typing
 
+import numpy as np
 import tensorflow as tf
 
 import logging
@@ -32,11 +33,10 @@ class StyleParamStack:
 def _apply_style_weights(style_weights, style_params):
     with tf.name_scope("apply_style_weights"):
         if style_params.shape[-2] == 2:
-            def weight_style(params, weights):
-                return tf.einsum('byxc,biif->byxf', weights, params)
-
-            return weight_style(tf.expand_dims(style_params[..., 0, :], -2), style_weights) + \
-                   weight_style(tf.expand_dims(style_params[..., 1, :], -2), 1.0 - style_weights)
+            style_params = tf.expand_dims(style_params, 1)
+            style_weights = tf.expand_dims(style_weights, -1)
+            weighted_params = style_params * style_weights
+            return tf.reduce_sum(weighted_params, axis=-2)
 
         return style_params
 
@@ -60,9 +60,11 @@ class ConditionalInstanceNormalization(tf.keras.layers.Layer):
         bias = _apply_style_weights(style_weights, style_params.get_params(self.num_feature_maps))
 
         mean, variance = tf.nn.moments(x, axes=[1, 2], keepdims=True)
-
-        inv = tf.math.rsqrt(variance + self.epsilon) * scale
-        x = x * tf.cast(inv, x.dtype) + tf.cast(bias - mean * inv, x.dtype)
+        inv = tf.math.rsqrt(variance + self.epsilon)
+        x = x * tf.cast(inv, x.dtype) + tf.cast(-mean * inv, x.dtype)
+        x = bias + x * scale
+        # could be rearranged as
+        # x = bias1 + x * scale1 + w * (bias2-bias1 - x*(scale1 + scale2))
         return x
 
     def get_config(self):
@@ -81,7 +83,7 @@ class ConditionalInstanceNormalization(tf.keras.layers.Layer):
     @classmethod
     def get_style_weights_shape(cls, content_shape: typing.Tuple, num_styles, multiplier=1) -> typing.Tuple:
         style_weights_shape = list(content_shape)
-        style_weights_shape[-1] = num_styles - 1
+        style_weights_shape[-1] = num_styles
         style_weights_shape[-2] *= multiplier
         style_weights_shape[-3] *= multiplier
         return tuple(style_weights_shape)
@@ -222,7 +224,7 @@ def create_style_transfer_model(input_shape, num_styles,
 
     inputs = {'content': tf.keras.layers.Input(shape=input_shape),
               'style_weights': tf.keras.layers.Input(
-                  shape=ConditionalInstanceNormalization.get_style_weights_shape(input_shape, num_styles)),
+                  shape=ConditionalInstanceNormalization.get_style_weights_shape(input_shape, num_styles - 1)),
               'style_params': tf.keras.layers.Input(
                   shape=(num_styles, num_style_parameters)
               )}
@@ -238,6 +240,11 @@ def create_style_transfer_model(input_shape, num_styles,
     for contract_block in contract_blocks:
         x = contract_block(x)
 
+    style_weights = tf.concat(
+        [
+            1 - style_weights,
+            style_weights,
+        ], axis=-1)
     style_weights_mips = _get_style_weight_mips(style_weights)
 
     style_params_stack = StyleParamStack(style_params_input, style_weights)

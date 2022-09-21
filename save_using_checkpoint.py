@@ -12,10 +12,14 @@ import tf2onnx
 
 argparser = argparse.ArgumentParser()
 argparser.add_argument('--checkpoint_path', '-C', type=Path, required=True)
+argparser.add_argument('--tensorflow', '-t', action='store_true')
+argparser.add_argument('--onnx', '-x', action='store_true')
 argparser.add_argument('--outpath', '-o', type=Path, required=True)
 
 args = argparser.parse_args()
 checkpoint_path: Path = args.checkpoint_path
+with_tensorflow: bool = args.tensorflow
+with_onnx: bool = args.onnx
 outpath: Path = args.outpath
 
 image_shape = (960, 1920, 3)
@@ -73,26 +77,30 @@ style_transfer_models.inference(element)
 log.info(f"Loading weights...")
 style_transfer_models.inference.load_weights(filepath=str(checkpoint_path))
 
-log.info(f"Saving model...")
-transfer_path = outpath.with_suffix(".transfer.tf")
-style_transfer_models.transfer.save(filepath=str(transfer_path), include_optimizer=False,
-                                    save_format='tf')
 predictor_path = outpath.with_suffix(".predictor.tf")
-style_transfer_models.style_predictor.save(filepath=str(predictor_path), include_optimizer=False,
-                                           save_format='tf')
+transfer_path = outpath.with_suffix(".transfer.tf")
 
-log.info("Saving style predictor model as ONNX...")
-tf2onnx.convert.from_keras(style_transfer_models.style_predictor,
-                           [tf.TensorSpec((None,) + image_shape, name='style')],
-                           output_path=predictor_path.with_suffix('.onnx'))
+if with_tensorflow:
+    log.info(f"Saving model as tensorflow...")
+    style_transfer_models.transfer.save(filepath=str(transfer_path), include_optimizer=False,
+                                        save_format='tf')
+    predictor_path = outpath.with_suffix(".predictor.tf")
+    style_transfer_models.style_predictor.save(filepath=str(predictor_path), include_optimizer=False,
+                                               save_format='tf')
 
-log.info("Saving transfer model as ONNX...")
-tf2onnx.convert.from_keras(style_transfer_models.transfer,
-                           [
-                               tf.TensorSpec((None,) + image_shape, name='content'),
-                               tf.TensorSpec((None, num_styles, num_style_norm_params), name='style_params'),
-                               tf.TensorSpec((None,) + style_weights_shape, name='style_weights'),
-                           ], output_path=transfer_path.with_suffix('.onnx'))
+if with_onnx:
+    log.info("Saving style predictor model as ONNX...")
+    tf2onnx.convert.from_keras(style_transfer_models.style_predictor,
+                               [tf.TensorSpec((None,) + image_shape, name='style')],
+                               output_path=predictor_path.with_suffix('.onnx'))
+
+    log.info("Saving transfer model as ONNX...")
+    tf2onnx.convert.from_keras(style_transfer_models.transfer,
+                               [
+                                   tf.TensorSpec((None,) + image_shape, name='content'),
+                                   tf.TensorSpec((None, num_styles, num_style_norm_params), name='style_params'),
+                                   tf.TensorSpec((None,) + style_weights_shape, name='style_weights'),
+                               ], output_path=transfer_path.with_suffix('.onnx'))
 log.info("Saving checkpoint...")
 checkpoint_outdir = outpath.with_suffix(".checkpoint")
 checkpoint_outdir.mkdir(exist_ok=True)

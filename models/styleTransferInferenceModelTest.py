@@ -30,7 +30,7 @@ class StyleTransferInferenceModelTest(unittest.TestCase):
             style_transfer_factory_func=lambda: styleTransfer.create_style_transfer_model(
                 self.input_element_shape, num_styles=self.num_styles, name="StyleTransferTestModel"),
             style_predictor_factory_func=lambda num_style_params: stylePrediction.create_style_prediction_model(
-                self.input_element_shape, stylePrediction.StyleFeatureExtractor.DUMMY, num_style_params),
+                self.input_element_shape, stylePrediction.StyleFeatureExtractor.MOBILE_NET, num_style_params),
             name="StyleTransferInferenceTestModel"
         )
 
@@ -53,4 +53,4 @@ class StyleTransferInferenceModelTest(unittest.TestCase):
     def test_load_model(self):
         test_checkpoint = Path(__file__).parent.parent / "test" / \
                           "acceptance_data" / "inference.checkpoint" / "checkpoint"
-        self.inferenceModel.inference.load_weights(test_checkpoint, True)
+        self.inferenceModel.inference.load_weights(test_checkpoint)

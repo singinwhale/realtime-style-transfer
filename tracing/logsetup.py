@@ -90,7 +90,7 @@ logging.getLogger('matplotlib').setLevel(logging.WARN)
 logging.getLogger('PIL').setLevel(logging.INFO)
 logging.getLogger('tf2onnx').setLevel(logging.INFO)
 
-# make numpy arrays smallerl
+# make numpy arrays smaller
 import numpy
 
-numpy.set_printoptions(threshold=10, edgeitems=1)
+# numpy.set_printoptions(threshold=10, edgeitems=1)

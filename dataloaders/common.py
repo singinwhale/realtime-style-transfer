@@ -35,7 +35,7 @@ def _preprocess_image(image, shape):
 def _load_image_from_file(filepath, shape):
     assert len(shape) == 3, "this function does not take care of special shapes"
     image = tf.keras.utils.load_img(path=filepath, interpolation="lanczos",
-                                    color_mode='rgb' if shape[2] == 3 else 'rgba')
+                                    color_mode='grayscale' if shape[2] == 1 else 'rgb' if shape[2] == 3 else 'rgba')
     image = _preprocess_image(image, (shape[1], shape[0], shape[2]))
     return image
 
