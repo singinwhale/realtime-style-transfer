@@ -18,7 +18,8 @@ class ErrorStreamWrapper:
             self.line = ""
 
     def _print(self, s):
-        self.stream.write(s)
+        if self.stream is not None:
+            self.stream.write(s)
         logging.error(s)
         self.last_print_time = time.time_ns()
 
@@ -26,17 +27,19 @@ class ErrorStreamWrapper:
         if len(self.line) > 0:
             self._print(self.line)
             self.line = ""
-        self.stream.flush()
+        if self.stream is not None:
+            self.stream.flush()
 
     def close(self):
-        self.stream.close()
+        if self.stream is not None:
+            self.stream.close()
 
 
 def enable_logfile(log_dir: Path):
     handler = logging.FileHandler(log_dir / "style-transfer.log", encoding='utf-8', delay=False)
     handler.setFormatter(DefaultFormatter(False))
     logging.root.addHandler(handler)
-    sys.stderr = ErrorStreamWrapper(sys.stderr)
+    sys.stderr = ErrorStreamWrapper(None)
 
 
 class DefaultFormatter(logging.Formatter):

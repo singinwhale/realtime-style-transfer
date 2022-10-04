@@ -240,9 +240,10 @@ def create_style_transfer_model(input_shape, num_styles,
     for contract_block in contract_blocks:
         x = contract_block(x)
 
+    sum_of_weights = tf.reduce_sum(style_weights, axis=-1, keepdims=True)
     style_weights = tf.concat(
         [
-            1 - style_weights,
+            1 - sum_of_weights,
             style_weights,
         ], axis=-1)
     style_weights_mips = _get_style_weight_mips(style_weights)

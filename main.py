@@ -47,14 +47,34 @@ from tracing.gradients import GradientsCallback
 
 resolution_divider = 2
 num_styles = 1
-input_shape = {'content': (960 // resolution_divider, 1920 // resolution_divider, 3),
+sdr_input_shape = {'content': (960 // resolution_divider, 1920 // resolution_divider, 3),
                'style_weights': (960 // resolution_divider, 1920 // resolution_divider, num_styles - 1),
                'style': (num_styles, 960 // resolution_divider, 1920 // resolution_divider, 3)}
-output_shape = (960 // resolution_divider, 1920 // resolution_divider, 3)
+hdr_input_shape = {'content': (960 // resolution_divider, 1920 // resolution_divider, 18),
+                   'style_weights': (960 // resolution_divider, 1920 // resolution_divider, num_styles - 1),
+                   'style': (num_styles, 960 // resolution_divider, 1920 // resolution_divider, 3)}
 
+output_shape = (960 // resolution_divider, 1920 // resolution_divider, 3)
+channels = [
+    ("FinalImage", 3),
+    ("BaseColor", 3),
+    ("ShadowMask", 1),
+    ("AmbientOcclusion", 1),
+    ("Metallic", 1),
+    ("Specular", 1),
+    ("Roughness", 1),
+    ("ViewNormal", 3),
+    ("SceneDepth", 1),
+    ("LightingModel", 3),
+]
+input_shape = hdr_input_shape
 # training_dataset, validation_dataset = wikiart.get_dataset_debug(input_shape, batch_size=4)
-training_dataset, validation_dataset = wikiart.get_dataset(input_shape, batch_size=8,
-                                                           cache_dir=cache_root_dir, seed=347890842)
+
+# training_dataset, validation_dataset = wikiart.get_dataset_debug(input_shape, batch_size=8,
+#                                                           cache_dir=cache_root_dir, seed=347890842)
+training_dataset, validation_dataset = wikiart.get_hdr_dataset_debug(input_shape, batch_size=8,
+                                                                     cache_dir=cache_root_dir, seed=347890842,
+                                                                     channels=channels)
 
 cache_root_dir.mkdir(exist_ok=True)
 

@@ -9,17 +9,13 @@ import sys
 import tqdm
 
 from . import common
+from .common import style_target_dir, style_image_dir, content_image_dir, style_debug_image_dir, \
+    content_debug_image_dir, content_hdr_image_dir, content_hdr_debug_image_dir
 import logging
 import hashlib
 
 log = logging.getLogger(__name__)
 
-content_target_dir = Path(__file__).parent.parent.absolute() / "data" / "screenshots"
-style_target_dir = Path(__file__).parent.parent.absolute() / "data" / "wikiart"
-style_image_dir = style_target_dir / 'images'
-content_image_dir = content_target_dir / 'images'
-style_debug_image_dir = style_target_dir / 'debug_images'
-content_debug_image_dir = content_target_dir / 'debug_images'
 manifest_filepath = style_target_dir / 'wikiart_scraped.csv'
 
 BLACKLISTED_IMAGE_HASHES = [
@@ -145,7 +141,7 @@ def download_images():
     import asyncio
     import tqdm
 
-    with tqdm.tqdm() as progress:
+    with tqdm.tqdm(file=sys.stdout) as progress:
         def progress_hook(url, filename, index, total):
             if progress.total != total:
                 progress.total = total
@@ -158,7 +154,7 @@ def download_images():
 import tensorflow as tf
 
 
-def get_dataset(shapes, batch_size, **kwargs) -> (tf.data.Dataset, tf.data.Dataset):
+def _get_dataset(shapes, batch_size, content_image_directory, **kwargs) -> (tf.data.Dataset, tf.data.Dataset):
     log.info("Loading WikiArt dataset...")
     init_dataset()
 
@@ -177,7 +173,8 @@ def get_dataset(shapes, batch_size, **kwargs) -> (tf.data.Dataset, tf.data.Datas
                                                                    shapes_without_batches['style'])
 
     training_content_dataset, validation_content_dataset = \
-        common.load_training_and_validation_dataset_from_directory(content_image_dir, shapes_without_batches['content'],
+        common.load_training_and_validation_dataset_from_directory(content_image_directory,
+                                                                   shapes_without_batches['content'],
                                                                    **kwargs)
 
     training_dataset = common.pair_up_content_and_style_datasets(content_dataset=training_content_dataset,
@@ -206,6 +203,27 @@ def get_dataset(shapes, batch_size, **kwargs) -> (tf.data.Dataset, tf.data.Datas
     return training_dataset, validation_dataset
 
 
+def get_dataset(shapes, batch_size, **kwargs) -> (tf.data.Dataset, tf.data.Dataset):
+    return _get_dataset(shapes, batch_size, content_image_dir, **kwargs)
+
+
+def get_hdr_dataset(shapes, batch_size, **kwargs) -> (tf.data.Dataset, tf.data.Dataset):
+    channels = [
+        ("SceneColor", 3),
+        ("SceneDepth", 3),
+        ("ShadowMask", 3),
+        ("Specular", 3),
+        ("ViewNormal", 3),
+        ("AmbientOcclusion", 3),
+        ("BaseColor", 3),
+        ("FinalImage", 3),
+        ("LightingModel", 3),
+        ("Metallic", 3),
+        ("Roughness", 3),
+    ]
+    return _get_dataset(shapes, batch_size, content_hdr_image_dir, channels=channels, **kwargs)
+
+
 def init_dataset():
     if not test_complete():
         if not test_manifest_exists():
@@ -214,7 +232,7 @@ def init_dataset():
             download_images()
 
 
-def get_dataset_debug(shapes, batch_size=1, **kwargs) -> (tf.data.Dataset, tf.data.Dataset):
+def _get_dataset_debug(shapes, batch_size, content_image_directory, **kwargs) -> (tf.data.Dataset, tf.data.Dataset):
     log.info("Loading Debug WikiArt dataset...")
     init_dataset()
     training_dir = style_debug_image_dir / "training"
@@ -234,19 +252,15 @@ def get_dataset_debug(shapes, batch_size=1, **kwargs) -> (tf.data.Dataset, tf.da
             debug_image_path = style_debug_image_dir / subset / image.name
             shutil.copyfile(image, debug_image_path)
 
+    training_dataset, validation_dataset = \
+        common.load_content_and_style_dataset_from_paths(content_image_directory,
+                                                         style_debug_image_dir,
+                                                         shapes,
+                                                         **kwargs)
     if batch_size is not None:
-        training_dataset, validation_dataset = \
-            common.load_content_and_style_dataset_from_paths(content_debug_image_dir,
-                                                             style_debug_image_dir,
-                                                             shapes,
-                                                             **kwargs)
         training_dataset = training_dataset.batch(batch_size)
         validation_dataset = validation_dataset.batch(batch_size)
-    else:
-        training_dataset, validation_dataset = common.load_content_and_style_dataset_from_paths(content_debug_image_dir,
-                                                                                                style_debug_image_dir,
-                                                                                                shapes,
-                                                                                                **kwargs)
+
     if "cache_dir" in kwargs:
         cache_dir = kwargs["cache_dir"]
         cache_path = Path(cache_dir)
@@ -256,10 +270,19 @@ def get_dataset_debug(shapes, batch_size=1, **kwargs) -> (tf.data.Dataset, tf.da
         log.info(f"Caching datasets into {cache_dir}. This could take a while")
         for name, dataset in {"training_dataset": training_dataset, "validation_dataset": validation_dataset}.items():
             # immediately cache everything
-            for _ in tqdm.tqdm(iterable=dataset, desc=name):
+
+            for _ in tqdm.tqdm(iterable=dataset, desc=name, file=sys.stdout):
                 pass
 
     return training_dataset, validation_dataset
+
+
+def get_dataset_debug(shapes, batch_size=1, **kwargs) -> (tf.data.Dataset, tf.data.Dataset):
+    return _get_dataset_debug(shapes, batch_size, content_debug_image_dir, **kwargs)
+
+
+def get_hdr_dataset_debug(shapes, batch_size=1, **kwargs) -> (tf.data.Dataset, tf.data.Dataset):
+    return _get_dataset_debug(shapes, batch_size, content_hdr_debug_image_dir, **kwargs)
 
 
 def _read_dataset_manifest():

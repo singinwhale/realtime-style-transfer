@@ -231,6 +231,12 @@ def make_style_loss_function(loss_feature_extractor_model: keras.Model, input_sh
 
     single_input_style = tf.squeeze(input_style, axis=1)
 
+    log.debug(input_content.shape[-1])
+    if input_content.shape[-1] > 3:
+        input_content = input_content[..., :3]
+
+    log.debug(input_content.shape)
+
     loss_data_content = loss_feature_extractor_model(input_content)
     loss_data_style = loss_feature_extractor_model(single_input_style)
     loss_data_prediction = loss_feature_extractor_model(input_prediction)

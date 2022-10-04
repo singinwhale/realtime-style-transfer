@@ -10,3 +10,4 @@ httpx
 pydot==1.4.*
 tf2onnx==1.12.*
 tensorboard-plugin-profile==2.8.*
+pyroexr==0.2.*
