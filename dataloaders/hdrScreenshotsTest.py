@@ -1,6 +1,7 @@
 import numpy as np
 
 from .hdrScreenshots import *
+from .common import content_hdr_debug_image_dir
 from . import hdrScreenshots
 from tracing import logsetup
 from pathlib import Path
@@ -14,7 +15,7 @@ class HdrScreenshotLoaderTests(unittest.TestCase):
     acceptance_data_dir = Path(__file__).parent.parent / "test" / "acceptance_data"
 
     def test_load_unreal_hdr_screenshot(self):
-        screenshot_data: np.ndarray = load_unreal_hdr_screenshot(TEST_SCREENSHOT_PNG_FILE, [
+        screenshot_data, base_png_filename = load_unreal_hdr_screenshot(TEST_SCREENSHOT_PNG_FILE, [
             ("FinalImage", 3),
             ("BaseColor", 3),
             ("ShadowMask", 1),
@@ -32,7 +33,7 @@ class HdrScreenshotLoaderTests(unittest.TestCase):
     def test_get_unreal_hdr_screenshot_dataset(self):
         import tensorflow as tf
         expected_shape = (960, 1920, 7)
-        dataset: tf.data.Dataset = get_debug_unreal_hdr_screenshot_dataset('validation', [
+        dataset: tf.data.Dataset = get_unreal_hdr_screenshot_dataset(content_hdr_debug_image_dir / "validation", [
             ("FinalImage", 3),
             ("BaseColor", 3),
             ("ShadowMask", 1),
