@@ -53,7 +53,7 @@ def create_style_prediction_model(input_shape, feature_extractor: StyleFeatureEx
 
     x = tf.keras.layers.GlobalAveragePooling2D(name="avg_pool", keepdims=True)(x)
 
-    log.info(f"Using {num_style_parameters} style parameters")
+    log.info(f"Bottlenecking to {num_style_parameters} parameters for {num_top_parameters} norm parameters")
 
     # x = tf.cast(x, tf.float32)
     x = tf.keras.layers.Conv2D(
@@ -63,7 +63,6 @@ def create_style_prediction_model(input_shape, feature_extractor: StyleFeatureEx
         name="StylePredictor")(x)
 
     num_norm_parameters = num_top_parameters
-    log.debug(f"Using {num_norm_parameters} norm parameters")
     x = tf.keras.layers.Conv2D(
         num_norm_parameters, 1,
         kernel_initializer=DENSE_KERNEL_INITIALIZER,

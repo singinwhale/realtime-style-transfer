@@ -45,36 +45,15 @@ from tracing.checkpoint import CheckpointCallback
 from tracing.histogram import HistogramCallback, write_model_histogram_summary
 from tracing.gradients import GradientsCallback
 
-resolution_divider = 2
-num_styles = 1
-sdr_input_shape = {'content': (960 // resolution_divider, 1920 // resolution_divider, 3),
-               'style_weights': (960 // resolution_divider, 1920 // resolution_divider, num_styles - 1),
-               'style': (num_styles, 960 // resolution_divider, 1920 // resolution_divider, 3)}
-hdr_input_shape = {'content': (960 // resolution_divider, 1920 // resolution_divider, 18),
-                   'style_weights': (960 // resolution_divider, 1920 // resolution_divider, num_styles - 1),
-                   'style': (num_styles, 960 // resolution_divider, 1920 // resolution_divider, 3)}
-
-output_shape = (960 // resolution_divider, 1920 // resolution_divider, 3)
-channels = [
-    ("FinalImage", 3),
-    ("BaseColor", 3),
-    ("ShadowMask", 1),
-    ("AmbientOcclusion", 1),
-    ("Metallic", 1),
-    ("Specular", 1),
-    ("Roughness", 1),
-    ("ViewNormal", 3),
-    ("SceneDepth", 1),
-    ("LightingModel", 3),
-]
-input_shape = hdr_input_shape
+from shape_config import ShapeConfig
+config = ShapeConfig(hdr=True, num_styles=1)
 # training_dataset, validation_dataset = wikiart.get_dataset_debug(input_shape, batch_size=4)
 
 # training_dataset, validation_dataset = wikiart.get_dataset_debug(input_shape, batch_size=8,
 #                                                           cache_dir=cache_root_dir, seed=347890842)
-training_dataset, validation_dataset = wikiart.get_hdr_dataset_debug(input_shape, batch_size=8,
+training_dataset, validation_dataset = wikiart.get_hdr_dataset_debug(config.input_shape, batch_size=8,
                                                                      cache_dir=cache_root_dir, seed=347890842,
-                                                                     channels=channels)
+                                                                     channels=config.channels)
 
 cache_root_dir.mkdir(exist_ok=True)
 
@@ -93,16 +72,16 @@ tensorboard_callback = tf.keras.callbacks.TensorBoard(log_dir=str(log_dir),
 summary_writer = tf.summary.create_file_writer(logdir=str(log_dir))
 
 with summary_writer.as_default() as summary:
-    style_loss_model = styleLoss.StyleLossModelVGG(output_shape)
+    style_loss_model = styleLoss.StyleLossModelVGG(config.output_shape)
     style_transfer_training_model = styleTransferTrainingModel.make_style_transfer_training_model(
-        input_shape,
+        config.input_shape,
         style_predictor_factory_func=lambda num_top_parameters: stylePrediction.create_style_prediction_model(
-            input_shape['style'][1:], stylePrediction.StyleFeatureExtractor.MOBILE_NET, num_top_parameters
+            config.input_shape['style'][1:], stylePrediction.StyleFeatureExtractor.MOBILE_NET, num_top_parameters
         ),
-        style_transfer_factory_func=lambda: styleTransfer.create_style_transfer_model(input_shape['content'],
-                                                                                      num_styles=num_styles),
-        style_loss_func_factory_func=lambda: styleLoss.make_style_loss_function(style_loss_model, input_shape,
-                                                                                output_shape),
+        style_transfer_factory_func=lambda: styleTransfer.create_style_transfer_model(config.input_shape['content'],
+                                                                                      num_styles=config.num_styles),
+        style_loss_func_factory_func=lambda: styleLoss.make_style_loss_function(style_loss_model, config.input_shape,
+                                                                                config.output_shape),
     )
 
     style_transfer_training_model.training.compile(run_eagerly=False)
