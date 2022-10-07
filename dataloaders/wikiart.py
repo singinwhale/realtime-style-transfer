@@ -18,6 +18,7 @@ log = logging.getLogger(__name__)
 
 manifest_filepath = style_target_dir / 'wikiart_scraped.csv'
 
+# Names of files that are blocked due to corrupted data
 BLACKLISTED_IMAGE_HASHES = [
     "a85d4a1f4cc89ff410a98160000a64749b0920ee", "0", "0", "0", "0", "0", "0", "0", "0", "0", "0", "0", "0", "0", "0",
     "0", "0", "0", "0", "0", "0", "0", "0", "0", "0", "0", "0", "0", "0", "0", "0", "0", "0", "0", "0", "0", "0", "0",
@@ -210,18 +211,19 @@ def get_dataset(shapes, batch_size, **kwargs) -> (tf.data.Dataset, tf.data.Datas
 def get_hdr_dataset(shapes, batch_size, **kwargs) -> (tf.data.Dataset, tf.data.Dataset):
     channels = [
         ("SceneColor", 3),
-        ("SceneDepth", 3),
-        ("ShadowMask", 3),
-        ("Specular", 3),
+        ("SceneDepth", 1),
+        ("ShadowMask", 1),
+        ("Specular", 1),
         ("ViewNormal", 3),
-        ("AmbientOcclusion", 3),
+        ("AmbientOcclusion", 1),
         ("BaseColor", 3),
         ("FinalImage", 3),
         ("LightingModel", 3),
-        ("Metallic", 3),
-        ("Roughness", 3),
+        ("Metallic", 1),
+        ("Roughness", 1),
     ]
-    return _get_dataset(shapes, batch_size, content_hdr_image_dir, channels=channels, **kwargs)
+    kwargs.setdefault("channels", channels)
+    return _get_dataset(shapes, batch_size, content_hdr_image_dir, **kwargs)
 
 
 def init_dataset():
@@ -270,9 +272,9 @@ def _get_dataset_debug(shapes, batch_size, content_image_directory, **kwargs) ->
         log.info(f"Caching datasets into {cache_dir}. This could take a while")
         for name, dataset in {"training_dataset": training_dataset, "validation_dataset": validation_dataset}.items():
             # immediately cache everything
-
-            for _ in tqdm.tqdm(iterable=dataset, desc=name, file=sys.stdout):
-                pass
+            if not (cache_dir / f"debug_{name}.index").exists():
+                for _ in tqdm.tqdm(iterable=dataset, desc=name, file=sys.stdout):
+                    pass
 
     return training_dataset, validation_dataset
 

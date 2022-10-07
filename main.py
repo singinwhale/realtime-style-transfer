@@ -31,6 +31,7 @@ import tracing
 log = logging.getLogger()
 
 cache_root_dir = Path(__file__).parent / 'cache'
+cache_root_dir.mkdir(exist_ok=True)
 log_root_dir = Path(__file__).parent / 'logs'
 log_dir = log_root_dir / str(datetime.datetime.now().strftime("%Y-%m-%d-%H-%M-%S.%f"))
 log_dir.mkdir(exist_ok=True, parents=True, )
@@ -46,16 +47,17 @@ from tracing.histogram import HistogramCallback, write_model_histogram_summary
 from tracing.gradients import GradientsCallback
 
 from shape_config import ShapeConfig
+
 config = ShapeConfig(hdr=True, num_styles=1)
 # training_dataset, validation_dataset = wikiart.get_dataset_debug(input_shape, batch_size=4)
 
 # training_dataset, validation_dataset = wikiart.get_dataset_debug(input_shape, batch_size=8,
 #                                                           cache_dir=cache_root_dir, seed=347890842)
-training_dataset, validation_dataset = wikiart.get_hdr_dataset_debug(config.input_shape, batch_size=8,
-                                                                     cache_dir=cache_root_dir, seed=347890842,
-                                                                     channels=config.channels)
+training_dataset, validation_dataset = wikiart.get_hdr_dataset(config.input_shape, batch_size=8,
+                                                               cache_dir=cache_root_dir,
+                                                               seed=347890842,
+                                                               channels=config.channels)
 
-cache_root_dir.mkdir(exist_ok=True)
 
 validation_log_datapoint = dataloaders.common.get_single_sample_from_dataset(validation_dataset)
 training_log_datapoint = dataloaders.common.get_single_sample_from_dataset(training_dataset)
@@ -84,12 +86,13 @@ with summary_writer.as_default() as summary:
                                                                                 config.output_shape),
     )
 
-    style_transfer_training_model.training.compile(run_eagerly=False)
+    style_transfer_training_model.training.compile(run_eagerly=False)  # True for Debugging, False for performance
 
     latest_epoch_weights_path = log_root_dir / "2022-09-14-19-01-08.839135" / "checkpoints" / "latest_epoch_weights"
     log.info(f"Loading weights from {latest_epoch_weights_path}")
     try:
-        style_transfer_training_model.training.load_weights(latest_epoch_weights_path)
+        # style_transfer_training_model.training.load_weights(latest_epoch_weights_path)
+        pass
     except Exception as e:
         log.warning(f"Could not load weights: {e}")
 
@@ -101,7 +104,7 @@ with summary_writer.as_default() as summary:
     # write_model_histogram_summary(style_transfer_training_model.training, -1)
     # with tf.profiler.experimental.Profile(str(log_dir)) as profiler:
     style_transfer_training_model.training.fit(x=training_dataset.prefetch(5), validation_data=validation_dataset,
-                                               epochs=3000,
+                                               epochs=300,
                                                callbacks=[  # tensorboard_callback,
                                                    image_callback,
                                                    checkpoint_callback,

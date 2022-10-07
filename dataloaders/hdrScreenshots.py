@@ -27,8 +27,15 @@ def load_unreal_hdr_screenshot(base_png_filepath: Path, expected_channels):
     return all_channels, base_png_filepath.stem
 
 
-def load_unreal_hdr_screenshots_from_dir(screenshots_dir: Path, expected_channels):
-    for screenshot in screenshots_dir.glob('*.png'):
+def load_unreal_hdr_screenshots_from_dir(screenshots_dir: Path, expected_channels, **kwargs):
+    screenshot_pngs = screenshots_dir.glob('*.png')
+    if "seed" in kwargs:
+        screenshot_pngs = list(screenshot_pngs)
+        import random
+        rng = random.Random(kwargs['seed'])
+        rng.shuffle(screenshot_pngs)
+
+    for screenshot in screenshot_pngs:
         yield load_unreal_hdr_screenshot(screenshot, expected_channels)
 
 

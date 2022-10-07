@@ -1,10 +1,10 @@
 tensorflow==2.9.*
 tensorflow-gpu==2.9.*
 tensorflow_hub==0.12.*
-numpy >= 1.20
+numpy>=1.20
 tqdm==4.*
 matplotlib==3.5.*
-pillow
+pillow>=6.2.0
 kaggle
 httpx
 pydot==1.4.*
