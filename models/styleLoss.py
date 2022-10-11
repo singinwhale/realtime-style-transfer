@@ -278,4 +278,4 @@ def make_style_loss_function(loss_feature_extractor_model: keras.Model, input_sh
             'prediction': y_pred,
         })
 
-    return compute_loss
+    return compute_loss, model

@@ -20,7 +20,8 @@ def make_style_transfer_training_model(input_shape,
         name=name
     )
 
-    losses = style_loss_func_factory_func()(inference_model.inputs, inference_model.inference.output)
+    style_loss_func, loss_model = style_loss_func_factory_func()
+    losses = style_loss_func(inference_model.inputs, inference_model.inference.output)
     inference_model.inference.add_loss(losses['loss'])
     for loss_name, loss_value in losses.items():
         if loss_name == "loss":
@@ -29,6 +30,7 @@ def make_style_transfer_training_model(input_shape,
 
     class StyleTransferModels:
         def __init__(self):
+            self.loss_model = tf.keras.Model(inference_model.inputs, losses)
             self.training = inference_model.inference
             self.transfer = inference_model.transfer
             self.style_predictor = inference_model.style_predictor

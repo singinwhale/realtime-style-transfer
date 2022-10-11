@@ -43,7 +43,7 @@ def get_unreal_hdr_screenshot_dataset(content_image_dir, expected_channels, shap
     import tensorflow as tf
 
     def load_hdr_screenshots_as_tensor():
-        for screenshot, name in load_unreal_hdr_screenshots_from_dir(content_image_dir, expected_channels):
+        for screenshot, name in load_unreal_hdr_screenshots_from_dir(content_image_dir, expected_channels, **kwargs):
             preprocessed_image: tf.Tensor = common.preprocess_numpy_image(screenshot, shape)
             yield preprocessed_image
 
