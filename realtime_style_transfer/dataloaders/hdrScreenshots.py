@@ -3,7 +3,6 @@ import numpy as np
 from pathlib import Path
 import pyroexr
 import logging
-import sys
 
 log = logging.getLogger(__name__)
 log.setLevel(logging.INFO)

@@ -1,12 +1,9 @@
-import os
 import shutil
 
 from . import styleTransferInferenceModel
 from . import stylePrediction
-from . import styleLoss
 from . import styleTransfer
 import unittest
-import tensorflow as tf
 from pathlib import Path
 import tempfile
 
@@ -51,6 +48,6 @@ class StyleTransferInferenceModelTest(unittest.TestCase):
             shutil.rmtree(temp_path)
 
     def test_load_model(self):
-        test_checkpoint = Path(__file__).parent.parent / "test" / \
+        test_checkpoint = Path(__file__).parent.parent.parent / "test" / \
                           "acceptance_data" / "inference.checkpoint" / "checkpoint"
         self.inferenceModel.inference.load_weights(test_checkpoint)

@@ -1,14 +1,11 @@
-from tracing import logsetup
-
 from pathlib import Path
 import struct
 import argparse
 import numpy as np
-import matplotlib.pyplot as plt
 import math
 import tensorflow as tf
 
-from metrics import get_stats, print_stat_comparison
+from realtime_style_transfer.metrics import get_stats, print_stat_comparison
 
 argparser = argparse.ArgumentParser()
 argparser.add_argument('input_tensor_path', type=Path)

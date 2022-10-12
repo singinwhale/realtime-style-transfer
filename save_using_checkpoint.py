@@ -1,7 +1,5 @@
 import shutil
 
-from tracing import logsetup
-
 import numpy as np
 
 from pathlib import Path
@@ -31,7 +29,7 @@ log = logging.getLogger()
 
 tf.config.set_visible_devices([], 'GPU')
 
-from models import styleTransfer, stylePrediction, styleLoss, styleTransferInferenceModel
+from realtime_style_transfer.models import styleTransfer, stylePrediction, styleTransferInferenceModel
 
 input_shape = {
     'content': image_shape,

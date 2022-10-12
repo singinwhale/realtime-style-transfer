@@ -1,11 +1,7 @@
-from tracing import logsetup
-
 from pathlib import Path
-import struct
 import argparse
-import numpy as np
 import matplotlib.pyplot as plt
-from dataloaders.tensorbuffer import load_tensor_from_buffer
+from realtime_style_transfer.dataloaders.tensorbuffer import load_tensor_from_buffer
 
 argparser = argparse.ArgumentParser()
 argparser.add_argument('tensor_path', type=Path)

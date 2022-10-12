@@ -1,17 +1,13 @@
-from tracing import logsetup
-
 from pathlib import Path
 import tensorflow as tf
 import numpy as np
 import logging
 import argparse
 import math
-import matplotlib.pyplot as plt
 from moviepy.editor import *
 
-from dataloaders import common, tensorbuffer, hdrScreenshots, wikiart
+from dataloaders import common, hdrScreenshots, wikiart
 from models import styleTransfer, stylePrediction, styleLoss, styleTransferTrainingModel
-from renderers.matplotlib import predict_datapoint
 
 argparser = argparse.ArgumentParser()
 argparser.add_argument('--checkpoint_path', '-C', type=Path, required=True)
@@ -23,14 +19,15 @@ checkpoint_path = args.checkpoint_path
 style_image_paths = args.style_image_path
 outpath = args.outpath
 
-from shape_config import ShapeConfig
+from realtime_style_transfer.shape_config import ShapeConfig
 
 config = ShapeConfig(hdr=True, num_styles=1)
 
 content_dataset = hdrScreenshots.get_unreal_hdr_screenshot_dataset(wikiart.content_hdr_image_dir / "training", config.channels,
                                                                    config.hdr_input_shape['content'])
 template_datapoint = {
-    'style': tf.expand_dims(common.image_dataset_from_filepaths(style_image_paths, config.image_shape).batch(1).get_single_element(), 0),
+    'style': tf.expand_dims(
+        common.image_dataset_from_filepaths(style_image_paths, config.image_shape).batch(1).get_single_element(), 0),
     'style_weights': tf.zeros((1,) + config.input_shape['style_weights'])
 }
 

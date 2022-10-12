@@ -1,20 +1,8 @@
-import sys
-import timeit
-
-import matplotlib.pyplot as plt
-import numpy as np
 import shap
-import tqdm
-
-import dataloaders.common
-from tracing import logsetup
 
 from pathlib import Path
-import tensorflow as tf
 import logging
 import argparse
-
-from dataloaders import common
 
 log = logging.getLogger()
 
@@ -24,13 +12,13 @@ argparser.add_argument('--checkpoint_path', '-C', type=Path, required=True)
 args = argparser.parse_args()
 checkpoint_path = args.checkpoint_path
 
-from shape_config import *
+from realtime_style_transfer.shape_config import *
 
 num_styles = 1
 config = ShapeConfig(hdr=True, num_styles=num_styles)
 
-from models import styleTransfer, stylePrediction, styleTransferTrainingModel, styleLoss
-from dataloaders import wikiart
+from realtime_style_transfer.models import styleTransfer, stylePrediction, styleTransferTrainingModel, styleLoss
+from realtime_style_transfer.dataloaders import wikiart
 
 style_transfer_training_model = styleTransferTrainingModel.make_style_transfer_training_model(
     config.input_shape,

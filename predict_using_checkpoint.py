@@ -1,17 +1,13 @@
-import timeit
-
-import matplotlib.pyplot as plt
 import numpy as np
 
-import dataloaders.common
-from tracing import logsetup
+import realtime_style_transfer.dataloaders as dataloaders
 
 from pathlib import Path
 import tensorflow as tf
 import logging
 import argparse
 
-from dataloaders import common
+from realtime_style_transfer.dataloaders import common
 
 log = logging.getLogger()
 
@@ -30,7 +26,7 @@ style_weights_path = args.style_weights_path
 outpath = args.outpath
 
 
-from shape_config import *
+from realtime_style_transfer.shape_config import *
 
 num_styles = len(style_image_paths)
 config = ShapeConfig(hdr=True, num_styles=num_styles)
@@ -51,8 +47,8 @@ element = {
     'style': tf.stack(list(common.image_dataset_from_filepaths(style_image_paths, config.image_shape).batch(1)), axis=1)
 }
 
-from models import styleTransfer, stylePrediction, styleTransferInferenceModel
-from renderers.matplotlib import predict_datapoint
+from realtime_style_transfer.models import styleTransfer, stylePrediction, styleTransferInferenceModel
+from realtime_style_transfer.renderers.matplotlib import predict_datapoint
 
 
 style_transfer_inference_model = styleTransferInferenceModel.make_style_transfer_inference_model(

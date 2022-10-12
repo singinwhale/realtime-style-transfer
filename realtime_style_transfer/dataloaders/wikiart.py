@@ -84,7 +84,6 @@ async def download_images_async(progress_hook: typing.Callable[[str, Path, int, 
     httpx_log.setLevel(logging.INFO)
 
     if not style_image_dir.exists():
-        import os
         log.info(f"Creating imagedir at {style_image_dir}")
         style_image_dir.mkdir(parents=True)
 

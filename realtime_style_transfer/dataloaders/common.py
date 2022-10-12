@@ -10,9 +10,8 @@ import numpy as np
 
 log = logging.getLogger(__name__)
 log.setLevel(logging.INFO)
-
-content_target_dir = Path(__file__).parent.parent.absolute() / "data" / "screenshots"
-style_target_dir = Path(__file__).parent.parent.absolute() / "data" / "wikiart"
+content_target_dir = Path(__file__).parent.parent.parent.absolute() / "data" / "screenshots"
+style_target_dir = Path(__file__).parent.parent.parent.absolute() / "data" / "wikiart"
 style_image_dir = style_target_dir / 'images'
 content_image_dir = content_target_dir / 'images'
 content_hdr_image_dir = content_target_dir / 'hdr_images'

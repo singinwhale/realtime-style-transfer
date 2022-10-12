@@ -1,5 +1,3 @@
-from tracing import logsetup
-
 from pathlib import Path
 import tensorflow as tf
 import numpy as np
@@ -7,7 +5,7 @@ import logging
 import argparse
 import matplotlib.pyplot as plt
 
-from dataloaders import common, tensorbuffer
+from realtime_style_transfer.dataloaders import common, tensorbuffer
 
 argparser = argparse.ArgumentParser()
 argparser.add_argument('--checkpoint_path', '-C', type=Path, required=True)
@@ -31,8 +29,7 @@ datapoint = {
 
 log = logging.getLogger()
 
-from models import styleTransfer, stylePrediction, styleLoss, styleTransferTrainingModel
-from renderers.matplotlib import predict_datapoint
+from realtime_style_transfer.models import styleTransfer, stylePrediction, styleLoss, styleTransferTrainingModel
 
 input_shape = {'content': image_shape, 'style': image_shape}
 output_shape = image_shape

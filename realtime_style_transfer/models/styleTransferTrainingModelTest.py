@@ -1,13 +1,9 @@
-import os
-import shutil
-
 from . import styleTransferTrainingModel
 from . import stylePrediction
 from . import styleLoss
 from . import styleTransfer
 import unittest
 import tensorflow as tf
-import tempfile
 
 
 class StyleTransferTrainingModelTest(unittest.TestCase):

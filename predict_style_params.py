@@ -1,16 +1,12 @@
-from tracing import logsetup
-
 from pathlib import Path
 import struct
 import argparse
 import numpy as np
-import matplotlib.pyplot as plt
-import math
 import tensorflow as tf
-from dataloaders import common
+from realtime_style_transfer.dataloaders import common
 import logging
 
-import metrics
+import realtime_style_transfer.metrics as metrics
 
 log = logging.getLogger()
 

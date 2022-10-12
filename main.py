@@ -7,7 +7,7 @@ os.environ['PATH'] += r";C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v11.
 
 import datetime
 
-import dataloaders.common
+import realtime_style_transfer.dataloaders as dataloaders
 
 import tensorflow as tf
 
@@ -26,7 +26,7 @@ finally:
 # tf.keras.mixed_precision.set_global_policy('mixed_float16')
 
 import logging
-import tracing
+import realtime_style_transfer.tracing as tracing
 
 log = logging.getLogger()
 
@@ -37,24 +37,24 @@ log_dir = log_root_dir / str(datetime.datetime.now().strftime("%Y-%m-%d-%H-%M-%S
 log_dir.mkdir(exist_ok=True, parents=True, )
 tracing.logsetup.enable_logfile(log_dir)
 
-from dataloaders import wikiart
-from models import stylePrediction, styleLoss, styleTransfer, styleTransferTrainingModel
-from tracing.tf_image_callback import SummaryImageCallback
-from renderers.matplotlib import predict_datapoint
-from tracing.textSummary import capture_model_summary
-from tracing.checkpoint import CheckpointCallback
-from tracing.histogram import HistogramCallback, write_model_histogram_summary
-from tracing.gradients import GradientsCallback
+from realtime_style_transfer.dataloaders import wikiart
+from realtime_style_transfer.models import stylePrediction, styleLoss, styleTransfer, styleTransferTrainingModel
+from realtime_style_transfer.tracing.tf_image_callback import SummaryImageCallback
+from realtime_style_transfer.renderers.matplotlib import predict_datapoint
+from realtime_style_transfer.tracing.textSummary import capture_model_summary
+from realtime_style_transfer.tracing.checkpoint import CheckpointCallback
+from realtime_style_transfer.tracing.histogram import HistogramCallback
+from realtime_style_transfer.tracing.gradients import GradientsCallback
 
-from shape_config import ShapeConfig
+from realtime_style_transfer.shape_config import ShapeConfig
 
 config = ShapeConfig(hdr=True, num_styles=1)
 # training_dataset, validation_dataset = wikiart.get_dataset_debug(input_shape, batch_size=4)
 
 # training_dataset, validation_dataset = wikiart.get_dataset_debug(input_shape, batch_size=8,
 #                                                           cache_dir=cache_root_dir, seed=347890842)
-training_dataset, validation_dataset = wikiart.get_hdr_dataset(config.input_shape, batch_size=8,
-                                                               cache_dir=cache_root_dir,
+training_dataset, validation_dataset = wikiart.get_hdr_dataset(config.input_shape, batch_size=1,
+                                                               #cache_dir=cache_root_dir,
                                                                seed=347890842,
                                                                channels=config.channels)
 

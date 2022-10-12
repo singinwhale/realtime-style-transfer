@@ -1,13 +1,9 @@
-import numpy as np
-
 from .hdrScreenshots import *
 from .common import content_hdr_debug_image_dir
-from . import hdrScreenshots
-from tracing import logsetup
 from pathlib import Path
 import unittest
 
-TEST_SCREENSHOT_DIR = Path(__file__).parent.parent / "test" / "test_screenshots"
+TEST_SCREENSHOT_DIR = Path(__file__).parent.parent.parent / "test" / "test_screenshots"
 TEST_SCREENSHOT_PNG_FILE = TEST_SCREENSHOT_DIR / "HighresScreenshot_2022.09.30-10.02.06.png"
 
 
