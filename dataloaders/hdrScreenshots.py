@@ -27,26 +27,24 @@ def load_unreal_hdr_screenshot(base_png_filepath: Path, expected_channels):
     return all_channels, base_png_filepath.stem
 
 
-def load_unreal_hdr_screenshots_from_dir(screenshots_dir: Path, expected_channels, **kwargs):
-    screenshot_pngs = screenshots_dir.glob('*.png')
+def get_unreal_hdr_screenshot_dataset(content_image_dir, expected_channels, shape, **kwargs):
+    import tensorflow as tf
+
+    screenshot_pngs = list(content_image_dir.glob('*.png'))
+    num_samples = len(screenshot_pngs)
     if "seed" in kwargs:
-        screenshot_pngs = list(screenshot_pngs)
         import random
         rng = random.Random(kwargs['seed'])
         rng.shuffle(screenshot_pngs)
 
-    for screenshot in screenshot_pngs:
-        yield load_unreal_hdr_screenshot(screenshot, expected_channels)
-
-
-def get_unreal_hdr_screenshot_dataset(content_image_dir, expected_channels, shape, **kwargs):
-    import tensorflow as tf
-
     def load_hdr_screenshots_as_tensor():
-        for screenshot, name in load_unreal_hdr_screenshots_from_dir(content_image_dir, expected_channels, **kwargs):
-            preprocessed_image: tf.Tensor = common.preprocess_numpy_image(screenshot, shape)
+        for screenshot_png in screenshot_pngs:
+            channels, name = load_unreal_hdr_screenshot(screenshot_png, expected_channels)
+            preprocessed_image: tf.Tensor = common.preprocess_numpy_image(channels, shape)
             yield preprocessed_image
 
-    return tf.data.Dataset.from_generator(load_hdr_screenshots_as_tensor,
-                                          output_signature=tf.TensorSpec(shape, tf.float32),
-                                          name="UnrealHdrScreenshots")
+    dataset = tf.data.Dataset.from_generator(load_hdr_screenshots_as_tensor,
+                                             output_signature=tf.TensorSpec(shape, tf.float32),
+                                             name="UnrealHdrScreenshots")
+    dataset.num_samples = num_samples
+    return dataset

@@ -185,6 +185,7 @@ def _get_dataset(shapes, batch_size, content_image_directory, **kwargs) -> (tf.d
                                                                    style_dataset=validation_style_dataset,
                                                                    shapes=shapes_without_batches)
 
+    num_training_samples, num_validation_samples = training_dataset.num_samples, validation_dataset.num_samples
     if batch_size is not None:
         training_dataset = training_dataset.batch(batch_size)
         validation_dataset = validation_dataset.batch(batch_size)
@@ -194,12 +195,18 @@ def _get_dataset(shapes, batch_size, content_image_directory, **kwargs) -> (tf.d
         training_dataset = training_dataset.cache(filename=str(cache_dir / "wikiart_training_dataset"))
         validation_dataset = validation_dataset.cache(filename=str(cache_dir / "wikiart_validation_dataset"))
 
-        for name, dataset in {"training_dataset": training_dataset, "validation_dataset": validation_dataset}.items():
+        for name, (dataset, num_samples) in {
+            "training_dataset": (training_dataset, num_training_samples),
+            "validation_dataset": (validation_dataset, num_validation_samples)
+        }.items():
             if not (cache_dir / f"wikiart_{name}.index").exists():
                 log.info(f"Caching {name} into {cache_dir}. This could take a while")
                 # immediately cache everything
-                for _ in tqdm.tqdm(iterable=dataset, desc=name, file=sys.stdout):
+                for _ in tqdm.tqdm(iterable=dataset, desc=name, file=sys.stdout, total=num_samples):
                     pass
+
+    training_dataset.num_samples = num_training_samples
+    validation_dataset.num_samples = num_validation_samples
 
     return training_dataset, validation_dataset
 

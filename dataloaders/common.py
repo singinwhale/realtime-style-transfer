@@ -120,6 +120,7 @@ def image_dataset_from_filepaths(filepaths, shape) -> tf.data.Dataset:
 
     dataset = tf.data.Dataset.from_generator(generate_image_tensors,
                                              output_signature=tf.TensorSpec(shape))
+    dataset.__len__ = len(filepaths)
     return dataset
 
 
@@ -135,6 +136,7 @@ def pair_up_content_and_style_datasets(content_dataset, style_dataset, shapes) -
                                        name="style_weights_data"),
         'style': tf.TensorSpec(shape=shapes['style'], dtype=tf.dtypes.float32, name="style_data")
     })
+    paired_dataset.num_samples = min(content_dataset.num_samples, style_dataset.num_samples)
     return paired_dataset
 
 
