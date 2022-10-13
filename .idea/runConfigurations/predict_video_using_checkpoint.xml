@@ -3,6 +3,9 @@
     <module name="realtime-style-transfer" />
     <option name="INTERPRETER_OPTIONS" value="" />
     <option name="PARENT_ENVS" value="true" />
+    <envs>
+      <env name="PYTHONUNBUFFERED" value="1" />
+    </envs>
     <option name="SDK_HOME" value="" />
     <option name="WORKING_DIRECTORY" value="$PROJECT_DIR$" />
     <option name="IS_MODULE_SDK" value="true" />
@@ -12,7 +15,7 @@
     <option name="SCRIPT_NAME" value="$PROJECT_DIR$/predict_video_using_checkpoint.py" />
     <option name="PARAMETERS" value="-C &quot;C:\projects\realtime-style-transfer\temp\latest_epoch_weights&quot; -s &quot;C:\projects\realtime-style-transfer\data\wikiart\debug_images\validation\0021657a7ab21f1cfab9d92b34bd9d8ef46deefd.jpg&quot; -o &quot;C:\projects\realtime-style-transfer\temp\stylized_video.mp4&quot;" />
     <option name="SHOW_COMMAND_LINE" value="false" />
-    <option name="EMULATE_TERMINAL" value="false" />
+    <option name="EMULATE_TERMINAL" value="true" />
     <option name="MODULE_MODE" value="false" />
     <option name="REDIRECT_INPUT" value="false" />
     <option name="INPUT_FILE" value="" />

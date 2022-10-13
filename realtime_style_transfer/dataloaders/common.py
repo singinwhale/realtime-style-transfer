@@ -119,7 +119,7 @@ def image_dataset_from_filepaths(filepaths, shape) -> tf.data.Dataset:
 
     dataset = tf.data.Dataset.from_generator(generate_image_tensors,
                                              output_signature=tf.TensorSpec(shape))
-    dataset.__len__ = len(filepaths)
+    dataset.num_samples = len(filepaths)
     return dataset
 
 
