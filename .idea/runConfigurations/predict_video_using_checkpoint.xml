@@ -13,7 +13,7 @@
     <option name="ADD_SOURCE_ROOTS" value="true" />
     <EXTENSION ID="PythonCoverageRunConfigurationExtension" runner="coverage.py" />
     <option name="SCRIPT_NAME" value="$PROJECT_DIR$/predict_video_using_checkpoint.py" />
-    <option name="PARAMETERS" value="-C &quot;C:\projects\realtime-style-transfer\temp\latest_epoch_weights&quot; -s &quot;C:\projects\realtime-style-transfer\data\wikiart\debug_images\validation\0021657a7ab21f1cfab9d92b34bd9d8ef46deefd.jpg&quot; -o &quot;C:\projects\realtime-style-transfer\temp\stylized_video.mp4&quot;" />
+    <option name="PARAMETERS" value="-C .\logs\2022-10-13-17-57-41.424116\checkpoints\epoch_620_weights -s .\data\wikiart\debug_images\validation\00145565b2f2d869a5074b6d4a8c8e937a6ee0ec.jpg -o .\temp\2022-10-13-17-57-41.424116-no-finalimage-epoch620-val2.mp4" />
     <option name="SHOW_COMMAND_LINE" value="false" />
     <option name="EMULATE_TERMINAL" value="true" />
     <option name="MODULE_MODE" value="false" />

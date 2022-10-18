@@ -5,9 +5,10 @@ import logging
 import argparse
 import math
 from moviepy.editor import *
+from tqdm import tqdm
 
-from dataloaders import common, hdrScreenshots, wikiart
-from models import styleTransfer, stylePrediction, styleLoss, styleTransferTrainingModel
+from realtime_style_transfer.dataloaders import common, hdrScreenshots, wikiart
+from realtime_style_transfer.models import styleTransfer, stylePrediction, styleLoss, styleTransferTrainingModel
 
 argparser = argparse.ArgumentParser()
 argparser.add_argument('--checkpoint_path', '-C', type=Path, required=True)
@@ -23,7 +24,7 @@ from realtime_style_transfer.shape_config import ShapeConfig
 
 config = ShapeConfig(hdr=True, num_styles=1)
 
-content_dataset = hdrScreenshots.get_unreal_hdr_screenshot_dataset(wikiart.content_hdr_image_dir / "training", config.channels,
+content_dataset = hdrScreenshots.get_unreal_hdr_screenshot_dataset(wikiart.content_hdr_image_dir.parent / "boston_hdr_images", config.channels,
                                                                    config.hdr_input_shape['content'])
 template_datapoint = {
     'style': tf.expand_dims(
@@ -38,7 +39,7 @@ style_loss_model = styleLoss.StyleLossModelMobileNet(config.output_shape)
 style_transfer_training_model = styleTransferTrainingModel.make_style_transfer_training_model(
     config.input_shape,
     style_predictor_factory_func=lambda num_top_parameters: stylePrediction.create_style_prediction_model(
-        config.input_shape['style'][1:], stylePrediction.StyleFeatureExtractor.MOBILE_NET, num_top_parameters
+        config.input_shape['style'][1:], config.style_feature_extractor_type, num_top_parameters
     ),
     style_transfer_factory_func=lambda: styleTransfer.create_style_transfer_model(config.input_shape['content'], config.num_styles),
     style_loss_func_factory_func=lambda: styleLoss.make_style_loss_function(style_loss_model, config.input_shape,
@@ -58,11 +59,11 @@ log.info(f"Loading weights from {checkpoint_path}")
 style_transfer_training_model.training.load_weights(filepath=str(checkpoint_path))
 
 frames = list()
-for i, content_image in enumerate(content_dataset):
-    log.info(f"Generating frame {i}")
+content_progress = tqdm(enumerate(content_dataset), file=sys.stdout, total=content_dataset.num_samples, desc="Generating Frames")
+for i, content_image in content_progress:
     element = dict(template_datapoint)
     element['content'] = tf.expand_dims(content_image, 0)
-    predicted_frame = style_transfer_training_model.training.predict(element, batch_size=1)
+    predicted_frame = style_transfer_training_model.training.predict(element, batch_size=1, verbose=0)
 
     frames.append((np.squeeze(predicted_frame) * 255).astype(int))
 
