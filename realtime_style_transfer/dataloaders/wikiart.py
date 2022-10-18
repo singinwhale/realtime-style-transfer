@@ -201,7 +201,8 @@ def _get_dataset(shapes, batch_size, content_image_directory, **kwargs) -> (tf.d
             if not (cache_dir / f"wikiart_{name}.index").exists():
                 log.info(f"Caching {name} into {cache_dir}. This could take a while")
                 # immediately cache everything
-                for _ in tqdm.tqdm(iterable=dataset, desc=name, file=sys.stdout, total=num_samples):
+                for _ in tqdm.tqdm(iterable=dataset, desc=name, file=sys.stdout,
+                                   total=math.ceil(num_samples / batch_size) if batch_size else 1):
                     pass
 
     training_dataset.num_samples = num_training_samples

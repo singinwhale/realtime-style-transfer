@@ -1,10 +1,9 @@
 import time
 
 import tensorflow as tf
-from tensorflow import keras
 
 
-class SummaryImageCallback(keras.callbacks.Callback):
+class SummaryImageCallback(tf.keras.callbacks.Callback):
     model: tf.keras.models.Model
 
     def __init__(self, validation_datapoint, training_datapoint):

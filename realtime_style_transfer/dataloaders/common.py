@@ -65,7 +65,7 @@ def _load_image_from_file(filepath, shape):
     return image
 
 
-def _load_images_from_directory(image_dir: Path, shape, **kwargs) -> typing.Generator[PIL.Image.Image, None, None]:
+def _load_image_paths_from_directory(image_dir: Path, **kwargs) -> typing.Generator[Path, None, None]:
     import os
     log.debug(f"Searching for images in {image_dir}")
     rng = None
@@ -84,8 +84,7 @@ def _load_images_from_directory(image_dir: Path, shape, **kwargs) -> typing.Gene
                 log.debug(f"Ignoring {filepath} because it has an invalid suffix")
                 continue
 
-            image = _load_image_from_file(filepath, shape[-3:])
-            yield image
+            yield filepath
 
 
 def _image_to_tensor(image, shape) -> tf.Tensor:
@@ -97,14 +96,10 @@ def _image_to_tensor(image, shape) -> tf.Tensor:
 
 
 def image_dataset_from_directory(image_dir: Path, shape, **kwargs):
-    def generate_image_tensors():
-        for image in _load_images_from_directory(image_dir, shape, **kwargs):
-            tensor = _image_to_tensor(image, shape)
-            yield tensor
 
-    dataset = tf.data.Dataset.from_generator(generate_image_tensors,
-                                             output_signature=tf.TensorSpec(shape))
-    return dataset
+    image_paths = list(_load_image_paths_from_directory(image_dir, **kwargs))
+
+    return image_dataset_from_filepaths(image_paths, shape)
 
 
 def image_dataset_from_filepaths(filepaths, shape) -> tf.data.Dataset:

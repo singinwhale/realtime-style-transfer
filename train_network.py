@@ -45,6 +45,7 @@ from realtime_style_transfer.tracing.textSummary import capture_model_summary
 from realtime_style_transfer.tracing.checkpoint import CheckpointCallback
 from realtime_style_transfer.tracing.histogram import HistogramCallback
 from realtime_style_transfer.tracing.gradients import GradientsCallback
+from realtime_style_transfer.tracing.metrics import MetricsCallback
 
 from realtime_style_transfer.shape_config import ShapeConfig
 
@@ -53,9 +54,9 @@ config = ShapeConfig(hdr=True, num_styles=1)
 
 # training_dataset, validation_dataset = wikiart.get_dataset_debug(input_shape, batch_size=8,
 #                                                           cache_dir=cache_root_dir, seed=347890842)
-training_dataset, validation_dataset = wikiart.get_hdr_dataset(config.input_shape, batch_size=1,
-                                                               #cache_dir=cache_root_dir,
-                                                               seed=347890842,
+training_dataset, validation_dataset = wikiart.get_hdr_dataset(config.input_shape, batch_size=8,
+                                                               cache_dir=cache_root_dir,
+                                                               seed=34789082,
                                                                channels=config.channels)
 
 
@@ -64,9 +65,11 @@ training_log_datapoint = dataloaders.common.get_single_sample_from_dataset(train
 image_callback = SummaryImageCallback(validation_log_datapoint, training_log_datapoint)
 checkpoint_callback = CheckpointCallback(log_dir / "checkpoints", cadence=10)
 histogram_callback = HistogramCallback()
+metrics_callback = MetricsCallback(log_dir)
 gradients_callback = GradientsCallback(training_log_datapoint)
 tensorboard_callback = tf.keras.callbacks.TensorBoard(log_dir=str(log_dir),
-                                                      histogram_freq=5,
+                                                      update_freq=1,
+                                                      histogram_freq=0,
                                                       write_graph=False,
                                                       profile_batch=0, )
 
@@ -74,6 +77,7 @@ tensorboard_callback = tf.keras.callbacks.TensorBoard(log_dir=str(log_dir),
 summary_writer = tf.summary.create_file_writer(logdir=str(log_dir))
 
 with summary_writer.as_default() as summary:
+    tf.summary.text("config", str(config), step=-1)
     style_loss_model = styleLoss.StyleLossModelVGG(config.output_shape)
     style_transfer_training_model = styleTransferTrainingModel.make_style_transfer_training_model(
         config.input_shape,
@@ -88,8 +92,8 @@ with summary_writer.as_default() as summary:
 
     style_transfer_training_model.training.compile(run_eagerly=False)  # True for Debugging, False for performance
 
-    latest_epoch_weights_path = log_root_dir / "2022-09-14-19-01-08.839135" / "checkpoints" / "latest_epoch_weights"
-    log.info(f"Loading weights from {latest_epoch_weights_path}")
+    latest_epoch_weights_path = log_root_dir / "2022-10-13-17-57-41.424116" / "checkpoints" / "latest_epoch_weights"
+    # log.info(f"Loading weights from {latest_epoch_weights_path}")
     try:
         # style_transfer_training_model.training.load_weights(latest_epoch_weights_path)
         pass
@@ -108,6 +112,7 @@ with summary_writer.as_default() as summary:
                                                callbacks=[  # tensorboard_callback,
                                                    image_callback,
                                                    checkpoint_callback,
+                                                   metrics_callback,
                                                    # histogram_callback,
                                                ])
     predict_datapoint(validation_log_datapoint, training_log_datapoint, style_transfer_training_model.training,

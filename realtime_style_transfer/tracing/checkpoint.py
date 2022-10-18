@@ -1,8 +1,8 @@
 import tensorflow as tf
-from tensorflow import keras
 from pathlib import Path
 
-class CheckpointCallback(keras.callbacks.Callback):
+
+class CheckpointCallback(tf.keras.callbacks.Callback):
     model: tf.keras.models.Model
 
     def __init__(self, log_dir, cadence=1):
