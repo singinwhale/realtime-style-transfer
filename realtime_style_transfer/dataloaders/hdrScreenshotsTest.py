@@ -4,7 +4,7 @@ from pathlib import Path
 import unittest
 
 TEST_SCREENSHOT_DIR = Path(__file__).parent.parent.parent / "test" / "test_screenshots"
-TEST_SCREENSHOT_PNG_FILE = TEST_SCREENSHOT_DIR / "HighresScreenshot_2022.09.30-10.02.06.png"
+TEST_SCREENSHOT_PNG_FILE = TEST_SCREENSHOT_DIR / "HighresScreenshot_2022.10.19-17.36.24.png"
 
 
 class HdrScreenshotLoaderTests(unittest.TestCase):

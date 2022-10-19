@@ -268,7 +268,9 @@ def _get_dataset_debug(shapes, batch_size, content_image_directory, **kwargs) ->
                                                          **kwargs)
     if batch_size is not None:
         training_dataset = training_dataset.batch(batch_size)
+        training_dataset.num_samples = num_images
         validation_dataset = validation_dataset.batch(batch_size)
+        validation_dataset.num_samples = num_images
 
     if "cache_dir" in kwargs:
         cache_dir = kwargs["cache_dir"]
@@ -279,8 +281,10 @@ def _get_dataset_debug(shapes, batch_size, content_image_directory, **kwargs) ->
         log.info(f"Caching datasets into {cache_dir}. This could take a while")
         for name, dataset in {"training_dataset": training_dataset, "validation_dataset": validation_dataset}.items():
             # immediately cache everything
+            dataset.num_samples = num_images
             if not (cache_dir / f"debug_{name}.index").exists():
-                for _ in tqdm.tqdm(iterable=dataset, desc=name, file=sys.stdout):
+                for _ in tqdm.tqdm(iterable=dataset, desc=name, file=sys.stdout,
+                                   total=dataset.num_samples / batch_size if batch_size else 1):
                     pass
 
     return training_dataset, validation_dataset

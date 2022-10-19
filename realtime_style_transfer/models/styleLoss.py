@@ -1,6 +1,8 @@
-from tensorflow import keras
-import tensorflow as tf
+import math
 
+import tensorflow as tf
+import tensorflow_probability as tfp
+import numpy as np
 import logging
 
 log = logging.getLogger(__name__)
@@ -45,6 +47,7 @@ class StyleLossModelBase(tf.keras.models.Model):
         self.content_loss_factor = 1
         self.style_loss_factor = 1
         self.total_variation_loss_factor = 1
+        self.depth_loss_factor = 1
 
     def call(self, inputs, **kwargs):
         outputs = self.feature_extractor(inputs)
@@ -216,7 +219,45 @@ class StyleLossModelDummy(StyleLossModelBase):
         self.style_loss_factor = 1
 
 
-def make_style_loss_function(loss_feature_extractor_model: keras.Model, input_shape, output_shape):
+def get_depth_loss_func(input_shape):
+    import tensorflow_hub as hub
+
+    midas_model = hub.KerasLayer("https://tfhub.dev/intel/midas/v2/2", tags=['serve'],
+                                 signature='serving_default',
+                                 input_shape=input_shape, output_shape=input_shape[:-1])
+
+
+    def normalize_depth(d):
+        t = tfp.stats.percentile(d, 50)
+        s = tf.reduce_mean(tf.abs(d - t))
+        return (d - t) / s
+
+    def ssitrim_loss(d1, d2):
+        d1 = normalize_depth(d1)
+        d2 = normalize_depth(d2)
+        absolute_error = tf.abs(d1 - d2)
+        eightieth_percentile = tfp.stats.percentile(absolute_error, 80)
+        lower_eighty_percent = tf.boolean_mask(absolute_error, absolute_error < eightieth_percentile)
+        return 0.5 * tf.reduce_sum(lower_eighty_percent) / tf.cast(tf.size(absolute_error), tf.float32)
+
+    def ssimse_loss(d1, d2):
+        return 0.0
+
+    def depth_loss(ground_truth_image, predicted_image):
+        """
+        Depth loss according to Liu et al. 2017 - depth aware neural style transfer
+        """
+        resizing_layer = tf.keras.layers.Resizing(384, 384)
+        resized_predicted_image = resizing_layer(predicted_image)
+        resized_ground_truth_image = resizing_layer(ground_truth_image)
+        predicted_depth = midas_model(tf.transpose(resized_predicted_image, [0, 3, 1, 2]))
+        ground_truth_depth = midas_model(tf.transpose(resized_ground_truth_image, [0, 3, 1, 2]))
+        return tf.reduce_mean(tf.abs(ground_truth_depth - predicted_depth)**2)
+
+    return depth_loss
+
+
+def make_style_loss_function(loss_feature_extractor_model: StyleLossModelBase, input_shape, output_shape):
     loss_feature_extractor_model.trainable = False
     inputs = {
         'content': tf.keras.Input(input_shape['content']),
@@ -231,11 +272,9 @@ def make_style_loss_function(loss_feature_extractor_model: keras.Model, input_sh
 
     single_input_style = tf.squeeze(input_style, axis=1)
 
-    if input_content.shape[-1] > 3:
-        input_content = input_content[..., :3]
+    ground_truth_final_image = input_content[..., :3]
 
-
-    loss_data_content = loss_feature_extractor_model(input_content)
+    loss_data_content = loss_feature_extractor_model(ground_truth_final_image)
     loss_data_style = loss_feature_extractor_model(single_input_style)
     loss_data_prediction = loss_feature_extractor_model(input_prediction)
     input_feature_values: tf.Tensor = loss_data_content['content']
@@ -258,15 +297,22 @@ def make_style_loss_function(loss_feature_extractor_model: keras.Model, input_sh
         in zip(input_style_features.items(), output_style_features.items())
     ])
 
-    total_variation_loss = tf.image.total_variation(input_prediction,
-                                                    'total_variation_loss') * loss_feature_extractor_model.total_variation_loss_factor
+    total_variation_loss = tf.image.total_variation(input_prediction, 'total_variation_loss') * \
+                           loss_feature_extractor_model.total_variation_loss_factor
 
+    depth_loss = get_depth_loss_func(output_shape[:-1])(ground_truth_final_image, input_prediction) * \
+                 loss_feature_extractor_model.depth_loss_factor
+
+    total_loss = tf.cast(feature_loss, tf.float32) + \
+                 tf.cast(style_loss, tf.float32) + \
+                 tf.cast(total_variation_loss, tf.float32) + \
+                 depth_loss
     output = {
-        "loss": tf.cast(feature_loss, tf.float32) + tf.cast(style_loss, tf.float32) + tf.cast(total_variation_loss,
-                                                                                              tf.float32),
+        "loss": total_loss,
         "feature_loss": feature_loss,
         "style_loss": style_loss,
         "total_variation_loss": total_variation_loss,
+        "depth_loss": depth_loss,
     }
     model = tf.keras.Model(inputs, output, name="StyleLoss")
     model.trainable = False

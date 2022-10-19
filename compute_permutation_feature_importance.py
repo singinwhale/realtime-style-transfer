@@ -136,4 +136,4 @@ for loss, channels in permutation_importance_data.channel_contributions.items():
     print(f"-" * 29)
     for channel_name, channel_contribution in sorted_channels:
         print(
-            f"{channel_name:20s}: {channel_contribution:+03.05f} ({channel_contribution / permutation_importance_data.baseline_losses[loss]:03.05%})")
+            f"{channel_name:20s}: {channel_contribution:+03.05f} ({(channel_contribution / permutation_importance_data.baseline_losses[loss]).numpy().item():.05%})")

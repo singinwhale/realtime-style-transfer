@@ -1,3 +1,5 @@
+from realtime_style_transfer.models import stylePrediction
+
 class ShapeConfig:
     def __init__(self, num_styles=1, hdr=True):
         resolution_divider = 2
@@ -28,6 +30,7 @@ class ShapeConfig:
 
         self.output_shape = (960 // resolution_divider, 1920 // resolution_divider, 3)
         self.input_shape = self.hdr_input_shape if hdr else self.sdr_input_shape
+        self.style_feature_extractor_type = stylePrediction.StyleFeatureExtractor.MOBILE_NET
 
     def __str__(self):
         import json

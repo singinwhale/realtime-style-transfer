@@ -16,7 +16,7 @@ DENSE_KERNEL_INITIALIZER = {
 }
 
 
-class StyleFeatureExtractor(enum.Enum):
+class StyleFeatureExtractor:
     DUMMY = 'DUMMY'
     EFFICIENT_NET = 'EFFICIENT_NET'
     MOBILE_NET = 'MOBILE_NET'
