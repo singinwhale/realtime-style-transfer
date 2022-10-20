@@ -30,10 +30,14 @@ import realtime_style_transfer.tracing as tracing
 
 log = logging.getLogger()
 
+continue_from = None
+# continue_from = ("2022-10-19-13-37-01.057203", 162)
+
 cache_root_dir = Path(__file__).parent / 'cache'
 cache_root_dir.mkdir(exist_ok=True)
 log_root_dir = Path(__file__).parent / 'logs'
-log_dir = log_root_dir / str(datetime.datetime.now().strftime("%Y-%m-%d-%H-%M-%S.%f"))
+log_dir = log_root_dir / (
+    str(datetime.datetime.now().strftime("%Y-%m-%d-%H-%M-%S.%f")) if continue_from is None else continue_from[0])
 log_dir.mkdir(exist_ok=True, parents=True, )
 tracing.logsetup.enable_logfile(log_dir)
 
@@ -54,11 +58,10 @@ config = ShapeConfig(hdr=True, num_styles=1)
 
 # training_dataset, validation_dataset = wikiart.get_dataset_debug(input_shape, batch_size=8,
 #                                                           cache_dir=cache_root_dir, seed=347890842)
-training_dataset, validation_dataset = wikiart.get_hdr_dataset(config.input_shape, batch_size=8,
+training_dataset, validation_dataset = wikiart.get_hdr_dataset(config.input_shape, batch_size=6,
                                                                cache_dir=cache_root_dir,
                                                                seed=34789082,
                                                                channels=config.channels)
-
 
 validation_log_datapoint = dataloaders.common.get_single_sample_from_dataset(validation_dataset)
 training_log_datapoint = dataloaders.common.get_single_sample_from_dataset(training_dataset)
@@ -92,13 +95,14 @@ with summary_writer.as_default() as summary:
 
     style_transfer_training_model.training.compile(run_eagerly=False)  # True for Debugging, False for performance
 
-    latest_epoch_weights_path = log_root_dir / "2022-10-13-17-57-41.424116" / "checkpoints" / "latest_epoch_weights"
-    # log.info(f"Loading weights from {latest_epoch_weights_path}")
-    try:
-        # style_transfer_training_model.training.load_weights(latest_epoch_weights_path)
-        pass
-    except Exception as e:
-        log.warning(f"Could not load weights: {e}")
+    if continue_from is not None:
+        latest_epoch_weights_path = log_root_dir / continue_from[0] / "checkpoints" / "latest_epoch_weights"
+        log.info(f"Loading weights from {latest_epoch_weights_path}")
+        try:
+            style_transfer_training_model.training.load_weights(latest_epoch_weights_path)
+            pass
+        except Exception as e:
+            log.warning(f"Could not load weights: {e}")
 
     summary_text = capture_model_summary(style_transfer_training_model.training)
     tf.summary.text('summary', f"```\n{summary_text}\n```", -1)
@@ -109,6 +113,7 @@ with summary_writer.as_default() as summary:
     # with tf.profiler.experimental.Profile(str(log_dir)) as profiler:
     style_transfer_training_model.training.fit(x=training_dataset.prefetch(5), validation_data=validation_dataset,
                                                epochs=300,
+                                               initial_epoch=continue_from[1] if continue_from else 0,
                                                callbacks=[  # tensorboard_callback,
                                                    image_callback,
                                                    checkpoint_callback,
