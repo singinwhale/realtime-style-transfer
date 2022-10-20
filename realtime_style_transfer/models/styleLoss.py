@@ -219,12 +219,37 @@ class StyleLossModelDummy(StyleLossModelBase):
         self.style_loss_factor = 1
 
 
+class BatchifyLayer(tf.keras.layers.Layer):
+    def __init__(self, wrapped_layer, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.wrapped_layer = wrapped_layer
+
+    def build(self, input_shape):
+        if input_shape[0] is None:
+            input_shape = list(input_shape)
+            input_shape[0] = 1
+
+        self.wrapped_layer.build(input_shape)
+
+    def call(self, inputs, *args, **kwargs):
+        def batchify(t):
+            t_exp = tf.expand_dims(t, 0)
+            return self.wrapped_layer(t_exp)
+
+        mapped = tf.map_fn(batchify, inputs, infer_shape=False,
+                         fn_output_signature=tf.TensorSpec(
+                             dtype=tf.float32,
+                             shape=(None, 384, 384)
+                         ))
+        return mapped
+
+
 def get_depth_loss_func(input_shape):
     import tensorflow_hub as hub
 
-    midas_model = hub.KerasLayer("https://tfhub.dev/intel/midas/v2/2", tags=['serve'],
-                                 signature='serving_default',
-                                 input_shape=(3, 384, 384), output_shape=(384, 384))
+    midas_model = BatchifyLayer(hub.KerasLayer("https://tfhub.dev/intel/midas/v2/2", tags=['serve'],
+                                               signature='serving_default',
+                                               input_shape=(3, 384, 384), output_shape=(384, 384)))
 
     resizing_layer = tf.keras.layers.Resizing(384, 384)
 
@@ -252,9 +277,14 @@ def get_depth_loss_func(input_shape):
         resized_ground_truth_image = resizing_layer(ground_truth_image)
         predicted_depth = midas_model(tf.transpose(resized_predicted_image, [0, 3, 1, 2]))
         ground_truth_depth = midas_model(tf.transpose(resized_ground_truth_image, [0, 3, 1, 2]))
-        return tf.reduce_mean(tf.abs(ground_truth_depth - predicted_depth)**2)
+        return l2_loss_on_batch(ground_truth_depth - predicted_depth)
 
     return depth_loss
+
+
+def l2_loss_on_batch(tensor):
+    axis = list(range(1, len(tensor.shape)))
+    return tf.reduce_sum(0.5 * tensor ** 2, axis=axis)
 
 
 def make_style_loss_function(loss_feature_extractor_model: StyleLossModelBase, input_shape, output_shape):
@@ -283,19 +313,19 @@ def make_style_loss_function(loss_feature_extractor_model: StyleLossModelBase, i
     output_style_features: tf.Tensor = loss_data_prediction['style']
 
     feature_loss = tf.reduce_mean([
-        tf.nn.l2_loss((tf.cast(out_value, tf.float32) - tf.cast(in_value, tf.float32))) *
+        l2_loss_on_batch(tf.cast(out_value, tf.float32) - tf.cast(in_value, tf.float32)) *
         loss_feature_extractor_model.content_loss_factor
         for (input_layer, in_value), (out_layer, out_value)
         in zip(input_feature_values.items(), output_feature_values.items())
-    ])
+    ], axis=[0])
 
     gram_matrix_model = get_gram_matrix_model((None, None, None))
     style_loss = tf.reduce_mean([
-        tf.nn.l2_loss((gram_matrix_model(out_value) - gram_matrix_model(in_value))) *
+        l2_loss_on_batch((gram_matrix_model(out_value) - gram_matrix_model(in_value))) *
         loss_feature_extractor_model.style_loss_factor
         for (input_layer, in_value), (out_layer, out_value)
         in zip(input_style_features.items(), output_style_features.items())
-    ])
+    ], axis=[0])
 
     total_variation_loss = tf.image.total_variation(input_prediction, 'total_variation_loss') * \
                            loss_feature_extractor_model.total_variation_loss_factor

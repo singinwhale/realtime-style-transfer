@@ -185,9 +185,6 @@ def _get_dataset(shapes, batch_size, content_image_directory, **kwargs) -> (tf.d
                                                                    shapes=shapes_without_batches)
 
     num_training_samples, num_validation_samples = training_dataset.num_samples, validation_dataset.num_samples
-    if batch_size is not None:
-        training_dataset = training_dataset.batch(batch_size)
-        validation_dataset = validation_dataset.batch(batch_size)
 
     if 'cache_dir' in kwargs:
         cache_dir = kwargs['cache_dir']
@@ -202,8 +199,12 @@ def _get_dataset(shapes, batch_size, content_image_directory, **kwargs) -> (tf.d
                 log.info(f"Caching {name} into {cache_dir}. This could take a while")
                 # immediately cache everything
                 for _ in tqdm.tqdm(iterable=dataset, desc=name, file=sys.stdout,
-                                   total=math.ceil(num_samples / batch_size) if batch_size else 1):
+                                   total=num_samples):
                     pass
+
+    if batch_size is not None:
+        training_dataset = training_dataset.batch(batch_size)
+        validation_dataset = validation_dataset.batch(batch_size)
 
     training_dataset.num_samples = num_training_samples
     validation_dataset.num_samples = num_validation_samples
@@ -266,11 +267,6 @@ def _get_dataset_debug(shapes, batch_size, content_image_directory, **kwargs) ->
                                                          style_debug_image_dir,
                                                          shapes,
                                                          **kwargs)
-    if batch_size is not None:
-        training_dataset = training_dataset.batch(batch_size)
-        training_dataset.num_samples = num_images
-        validation_dataset = validation_dataset.batch(batch_size)
-        validation_dataset.num_samples = num_images
 
     if "cache_dir" in kwargs:
         cache_dir = kwargs["cache_dir"]
@@ -286,6 +282,12 @@ def _get_dataset_debug(shapes, batch_size, content_image_directory, **kwargs) ->
                 for _ in tqdm.tqdm(iterable=dataset, desc=name, file=sys.stdout,
                                    total=dataset.num_samples / batch_size if batch_size else 1):
                     pass
+
+    if batch_size is not None:
+        training_dataset = training_dataset.batch(batch_size)
+        training_dataset.num_samples = num_images
+        validation_dataset = validation_dataset.batch(batch_size)
+        validation_dataset.num_samples = num_images
 
     return training_dataset, validation_dataset
 
