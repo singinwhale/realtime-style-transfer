@@ -96,19 +96,24 @@ def _image_to_tensor(image, shape) -> tf.Tensor:
 
 
 def image_dataset_from_directory(image_dir: Path, shape, **kwargs):
-
     image_paths = list(_load_image_paths_from_directory(image_dir, **kwargs))
 
-    return image_dataset_from_filepaths(image_paths, shape)
+    return image_dataset_from_filepaths(image_paths, shape, **kwargs)
 
 
-def image_dataset_from_filepaths(filepaths, shape) -> tf.data.Dataset:
+def image_dataset_from_filepaths(filepaths, shape, **kwargs) -> tf.data.Dataset:
     def generate_image_tensors():
         for imagepath in filepaths:
             try:
                 image = _load_image_from_file(imagepath, shape[-3:])
                 tensor = _image_to_tensor(image, shape)
-                yield tensor
+                if 'output_shape' in kwargs:
+                    output_shape = kwargs['output_shape']
+                    ground_truth_image = _load_image_from_file(imagepath, output_shape[-3:])
+                    ground_truth_tensor = _image_to_tensor(ground_truth_image, output_shape)
+                    yield tensor, ground_truth_tensor
+                else:
+                    yield tensor
             except Exception as e:
                 log.warning(f"Could not read image {imagepath}: {e}")
 
@@ -118,18 +123,38 @@ def image_dataset_from_filepaths(filepaths, shape) -> tf.data.Dataset:
     return dataset
 
 
-def pair_up_content_and_style_datasets(content_dataset, style_dataset, shapes) -> tf.data.Dataset:
+def pair_up_content_and_style_datasets(content_dataset, style_dataset, shapes, **kwargs) -> tf.data.Dataset:
+    with_ground_truth = 'output_shape' in kwargs
+
     def _pair_up_dataset():
         for i, (content, style) in enumerate(zip(content_dataset, style_dataset)):
-            datapoint = {'content': content, 'style_weights': tf.zeros(shapes['style_weights']), 'style': style}
-            yield datapoint
+            datapoint = {'content': content[0] if with_ground_truth else content,
+                         'style_weights': tf.zeros(shapes['style_weights']),
+                         'style': style}
+            if with_ground_truth:
+                ground_truth = {
+                    'content': content[1],
+                    'style': style
+                }
+                yield datapoint, ground_truth
+            else:
+                yield datapoint
 
-    paired_dataset = tf.data.Dataset.from_generator(_pair_up_dataset, output_signature={
+    output_signature = {
         'content': tf.TensorSpec(shape=shapes['content'], dtype=tf.dtypes.float32, name="content_data"),
         'style_weights': tf.TensorSpec(shape=shapes['style_weights'], dtype=tf.dtypes.float32,
                                        name="style_weights_data"),
         'style': tf.TensorSpec(shape=shapes['style'], dtype=tf.dtypes.float32, name="style_data")
-    })
+    }
+
+    if with_ground_truth:
+        ground_truth_data = {
+            'content': tf.TensorSpec(shape=kwargs['output_shape'], dtype=tf.dtypes.float32),
+            'style': tf.TensorSpec(shape=shapes['style'], dtype=tf.dtypes.float32)
+        }
+        output_signature = (output_signature, ground_truth_data)
+
+    paired_dataset = tf.data.Dataset.from_generator(_pair_up_dataset, output_signature=output_signature)
     paired_dataset.num_samples = min(content_dataset.num_samples, style_dataset.num_samples)
     return paired_dataset
 
@@ -151,19 +176,23 @@ def load_training_and_validation_dataset_from_directory(image_dir, shape, **kwar
 def load_content_and_style_dataset_from_paths(content_image_directory, style_image_directory, shapes, **kwargs) -> \
         (tf.data.Dataset, tf.data.Dataset):
     def _create_content_and_style_dataset(subset):
+        style_kwargs = dict(kwargs)
+        if 'output_shape' in kwargs:
+            style_kwargs.pop('output_shape')
 
         if 'channels' in kwargs:
             from .hdrScreenshots import get_unreal_hdr_screenshot_dataset
             content_dataset = get_unreal_hdr_screenshot_dataset(content_image_directory / subset,
                                                                 kwargs['channels'],
-                                                                shapes['content'], **kwargs)
+                                                                shapes['content'],
+                                                                **kwargs)
         else:
             content_dataset: tf.data.Dataset = image_dataset_from_directory(content_image_directory / subset,
                                                                             shapes['content'],
                                                                             **kwargs)
         style_dataset: tf.data.Dataset = image_dataset_from_directory(style_image_directory / subset, shapes['style'],
-                                                                      **kwargs)
-        return pair_up_content_and_style_datasets(content_dataset, style_dataset, shapes)
+                                                                      **style_kwargs)
+        return pair_up_content_and_style_datasets(content_dataset, style_dataset, shapes, **kwargs)
 
     training_dataset = _create_content_and_style_dataset('training')
     validation_dataset = _create_content_and_style_dataset('validation')

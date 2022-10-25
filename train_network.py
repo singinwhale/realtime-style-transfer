@@ -58,10 +58,12 @@ config = ShapeConfig(hdr=True, num_styles=1)
 
 # training_dataset, validation_dataset = wikiart.get_dataset_debug(input_shape, batch_size=8,
 #                                                           cache_dir=cache_root_dir, seed=347890842)
-training_dataset, validation_dataset = wikiart.get_hdr_dataset(config.input_shape, batch_size=6,
-                                                               cache_dir=cache_root_dir,
-                                                               seed=34789082,
-                                                               channels=config.channels)
+training_dataset, validation_dataset = wikiart.get_hdr_dataset_debug(shapes=config.input_shape,
+                                                                     output_shape=config.output_shape,
+                                                                     batch_size=2,
+                                                                     cache_dir=cache_root_dir,
+                                                                     seed=34789082,
+                                                                     channels=config.channels)
 
 validation_log_datapoint = dataloaders.common.get_single_sample_from_dataset(validation_dataset)
 training_log_datapoint = dataloaders.common.get_single_sample_from_dataset(training_dataset)
@@ -83,17 +85,21 @@ with summary_writer.as_default() as summary:
     tf.summary.text("config", str(config), step=-1)
     style_loss_model = styleLoss.StyleLossModelVGG(config.output_shape)
     style_transfer_training_model = styleTransferTrainingModel.make_style_transfer_training_model(
-        config.input_shape,
         style_predictor_factory_func=lambda num_top_parameters: stylePrediction.create_style_prediction_model(
             config.input_shape['style'][1:], stylePrediction.StyleFeatureExtractor.MOBILE_NET, num_top_parameters
         ),
-        style_transfer_factory_func=lambda: styleTransfer.create_style_transfer_model(config.input_shape['content'],
-                                                                                      num_styles=config.num_styles),
-        style_loss_func_factory_func=lambda: styleLoss.make_style_loss_function(style_loss_model, config.input_shape,
-                                                                                config.output_shape),
+        style_transfer_factory_func=lambda: styleTransfer.create_style_transfer_model(
+            input_shape=config.input_shape['content'],
+            output_shape=config.output_shape,
+            bottleneck_res_y=config.bottleneck_res_y,
+            bottleneck_num_filters=config.bottleneck_num_filters,
+            num_styles=config.num_styles),
+        style_loss_func_factory_func=lambda: styleLoss.make_style_loss_function(style_loss_model,
+                                                                                config.output_shape,
+                                                                                config.num_styles,),
     )
 
-    style_transfer_training_model.training.compile(run_eagerly=False)  # True for Debugging, False for performance
+    style_transfer_training_model.training.compile(run_eagerly=True)  # True for Debugging, False for performance
 
     if continue_from is not None:
         latest_epoch_weights_path = log_root_dir / continue_from[0] / "checkpoints" / "latest_epoch_weights"
@@ -113,7 +119,6 @@ with summary_writer.as_default() as summary:
     # with tf.profiler.experimental.Profile(str(log_dir)) as profiler:
     style_transfer_training_model.training.fit(x=training_dataset.prefetch(5), validation_data=validation_dataset,
                                                epochs=300,
-                                               initial_epoch=continue_from[1] if continue_from else 0,
                                                callbacks=[  # tensorboard_callback,
                                                    image_callback,
                                                    checkpoint_callback,

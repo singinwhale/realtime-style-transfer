@@ -61,14 +61,14 @@ style_transfer_inference_model = styleTransferInferenceModel.make_style_transfer
 )
 
 # call once to build model
-style_transfer_inference_model.inference(element)
+style_transfer_inference_model.training(element)
 log.info(f"Loading weights from {checkpoint_path}")
-style_transfer_inference_model.inference.load_weights(filepath=str(checkpoint_path))
-predict_datapoint(element, element, style_transfer_inference_model.inference)
+style_transfer_inference_model.training.load_weights(filepath=str(checkpoint_path))
+predict_datapoint(element, element, style_transfer_inference_model.training)
 
 
 def do_inference():
-    style_transfer_inference_model.inference.predict(element)
+    style_transfer_inference_model.training.predict(element)
 
 
 # results = timeit.repeat(do_inference, repeat=20, number=1)

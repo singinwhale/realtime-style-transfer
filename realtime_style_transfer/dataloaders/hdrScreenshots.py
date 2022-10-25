@@ -1,6 +1,9 @@
+import PIL.Image
+
 from . import common
 import numpy as np
 from pathlib import Path
+from .common import _load_image_from_file, _image_to_tensor
 import pyroexr
 import logging
 
@@ -23,7 +26,7 @@ def load_unreal_hdr_screenshot(base_png_filepath: Path, expected_channels):
 
     all_channels = np.concatenate(channel_list, axis=-1)
     log.debug(all_channels.shape)
-    return all_channels, base_png_filepath.stem
+    return all_channels, base_png_filepath
 
 
 def get_unreal_hdr_screenshot_dataset(content_image_dir, expected_channels, shape, **kwargs):
@@ -38,12 +41,24 @@ def get_unreal_hdr_screenshot_dataset(content_image_dir, expected_channels, shap
 
     def load_hdr_screenshots_as_tensor():
         for screenshot_png in screenshot_pngs:
-            channels, name = load_unreal_hdr_screenshot(screenshot_png, expected_channels)
+            channels, screenshot_path = load_unreal_hdr_screenshot(screenshot_png, expected_channels)
             preprocessed_image: tf.Tensor = common.preprocess_numpy_image(channels, shape)
-            yield preprocessed_image
+            if 'output_shape' in kwargs:
+                output_shape = kwargs['output_shape']
+                ground_truth_image = _load_image_from_file(screenshot_path, output_shape[-3:])
+                ground_truth_tensor = _image_to_tensor(ground_truth_image, output_shape)
+                yield preprocessed_image, ground_truth_tensor
+            else:
+                yield preprocessed_image
+
+    if 'output_shape' in kwargs:
+        output_signature = (tf.TensorSpec(shape, tf.float32, name="content_data"),
+                            tf.TensorSpec(kwargs['output_shape'], tf.float32, name="truth_data"))
+    else:
+        output_signature = tf.TensorSpec(shape, tf.float32, name="content_data")
 
     dataset = tf.data.Dataset.from_generator(load_hdr_screenshots_as_tensor,
-                                             output_signature=tf.TensorSpec(shape, tf.float32),
+                                             output_signature=output_signature,
                                              name="UnrealHdrScreenshots")
     dataset.num_samples = num_samples
     return dataset

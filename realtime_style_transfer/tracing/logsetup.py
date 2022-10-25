@@ -55,11 +55,16 @@ class DefaultFormatter(logging.Formatter):
             logging.INFO: self.format_prefix + (self.format_file if with_file_info else "") + self.time_format,
             logging.WARNING: self.format_prefix + (self.format_file if with_file_info else "") + self.time_format,
             logging.ERROR: self.format_prefix + (self.format_file_detail if with_file_info else "") + self.time_format,
-            logging.CRITICAL: self.format_prefix + (self.format_file_detail if with_file_info else "") + self.time_format
+            logging.CRITICAL: self.format_prefix + (
+                self.format_file_detail if with_file_info else "") + self.time_format
         }
+
+        self.formatters = {level: logging.Formatter(fmt) for level, fmt in self.formats.items()}
 
     def format(self, record):
         log_fmt = self.formats.get(record.levelno)
+        if record.pathname == __file__:
+            log_fmt = log_fmt.replace(self.format_file_detail, "")
         formatter = logging.Formatter(log_fmt)
         return formatter.format(record)
 

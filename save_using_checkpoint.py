@@ -71,9 +71,9 @@ element = {
 }
 log.info(f"Running inference to build model...")
 # call once to build models
-style_transfer_models.inference(element)
+style_transfer_models.training(element)
 log.info(f"Loading weights...")
-style_transfer_models.inference.load_weights(filepath=str(checkpoint_path))
+style_transfer_models.training.load_weights(filepath=str(checkpoint_path))
 
 predictor_path = outpath.with_suffix(".predictor.tf")
 transfer_path = outpath.with_suffix(".transfer.tf")

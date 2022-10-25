@@ -83,7 +83,6 @@ class StyleLossModelVGG(StyleLossModelBase):
         vgg = tf.keras.applications.VGG16(include_top=False, weights='imagenet')
         vgg.trainable = False
 
-        channels = input_shape[-1]
         inputs = tf.keras.Input(shape=input_shape, dtype=tf.float32)
         x = inputs
         # x = tf.cast(inputs, tf.float16)
@@ -211,7 +210,7 @@ class StyleLossModelDummy(StyleLossModelBase):
             conv2.name
         ]
 
-        self.feature_extractor = tf.keras.Model(inputs, [output1, output2], name="Dummy")
+        self.feature_extractor = tf.keras.Model(inputs, {conv1.name: output1, conv2.name: output2}, name="Dummy")
         self.feature_extractor.trainable = False
 
         self.num_style_layers = 1
@@ -237,10 +236,10 @@ class BatchifyLayer(tf.keras.layers.Layer):
             return self.wrapped_layer(t_exp)
 
         mapped = tf.map_fn(batchify, inputs, infer_shape=False,
-                         fn_output_signature=tf.TensorSpec(
-                             dtype=tf.float32,
-                             shape=(None, 384, 384)
-                         ))
+                           fn_output_signature=tf.TensorSpec(
+                               dtype=tf.float32,
+                               shape=(None, 384, 384)
+                           ))
         return mapped
 
 
@@ -287,24 +286,24 @@ def l2_loss_on_batch(tensor):
     return tf.reduce_sum(0.5 * tensor ** 2, axis=axis)
 
 
-def make_style_loss_function(loss_feature_extractor_model: StyleLossModelBase, input_shape, output_shape):
+def make_style_loss_function(loss_feature_extractor_model: StyleLossModelBase, output_shape, num_styles):
     loss_feature_extractor_model.trainable = False
     inputs = {
-        'content': tf.keras.Input(input_shape['content']),
-        'style': tf.keras.Input(input_shape['style']),
         'prediction': tf.keras.Input(output_shape),
+        'ground_truth': {'content': tf.keras.Input(output_shape),
+                         'style': tf.keras.Input((num_styles,) + output_shape)}
     }
     # perform feature extraction on the input content image and diff it against the output features
-    input_content, input_style, input_prediction = inputs['content'], inputs['style'], inputs['prediction']
+    input_style, input_prediction, input_ground_truth = (inputs['ground_truth']['style'],
+                                                         inputs['prediction'],
+                                                         inputs['ground_truth']['content'])
 
-    assert input_style.shape[1] == 1, \
+    assert len(input_style.shape) < 5 or input_style.shape[1] == 1, \
         f"Loss model does not support multiple styles. Found {input_style.shape[1]} in shape {input_style.shape}"
 
-    single_input_style = tf.squeeze(input_style, axis=1)
+    single_input_style = tf.squeeze(input_style, axis=1) if input_style.shape[1] == 1 else input_style
 
-    ground_truth_final_image = input_content[..., :3]
-
-    loss_data_content = loss_feature_extractor_model(ground_truth_final_image)
+    loss_data_content = loss_feature_extractor_model(input_ground_truth)
     loss_data_style = loss_feature_extractor_model(single_input_style)
     loss_data_prediction = loss_feature_extractor_model(input_prediction)
     input_feature_values: tf.Tensor = loss_data_content['content']
@@ -330,7 +329,7 @@ def make_style_loss_function(loss_feature_extractor_model: StyleLossModelBase, i
     total_variation_loss = tf.image.total_variation(input_prediction, 'total_variation_loss') * \
                            loss_feature_extractor_model.total_variation_loss_factor
 
-    depth_loss = get_depth_loss_func(output_shape[:-1])(ground_truth_final_image, input_prediction) * \
+    depth_loss = get_depth_loss_func(output_shape[:-1])(input_ground_truth, input_prediction) * \
                  loss_feature_extractor_model.depth_loss_factor
 
     total_loss = tf.cast(feature_loss, tf.float32) + \
@@ -347,11 +346,10 @@ def make_style_loss_function(loss_feature_extractor_model: StyleLossModelBase, i
     model = tf.keras.Model(inputs, output, name="StyleLoss")
     model.trainable = False
 
-    def compute_loss(x: tf.Tensor, y_pred: tf.Tensor):
+    def compute_loss(y_pred: tf.Tensor, y_true):
         return model({
-            'content': x['content'],
-            'style': x['style'],
             'prediction': y_pred,
+            'ground_truth': y_true
         })
 
     return compute_loss, model

@@ -1,3 +1,4 @@
+import math
 import typing
 
 import numpy as np
@@ -131,7 +132,7 @@ def expand(input_shape: typing.Tuple, num_styles, filters, size, strides, name, 
     return expand_block_model, num_style_params, upscale_factor
 
 
-def residual_block(input_shape: typing.Tuple, num_styles, filters, size, strides, name):
+def residual_block(input_shape: typing.Tuple, num_styles, filters, size, strides, name, is_first=False):
     name = f"residual_block_{name}"
     initializer = tf.random_uniform_initializer(0., 0.05)
     content_input = tf.keras.Input(shape=input_shape, name="content_input")
@@ -162,7 +163,7 @@ def residual_block(input_shape: typing.Tuple, num_styles, filters, size, strides
             )
         )
 
-    out = tf.keras.layers.Add()([content_input, fx])
+    out = fx if is_first else tf.keras.layers.Add()([content_input, fx])
     return (tf.keras.models.Model(inputs, out, name=f"{name}"), num_style_params)
 
 
@@ -191,40 +192,77 @@ def calc_next_conv_dims(initial, filters, mult) -> typing.Tuple:
     return (initial[0], initial[1] * mult, initial[2] * mult, filters)
 
 
-def create_style_transfer_model(input_shape, num_styles,
+def create_style_transfer_model(input_shape, output_shape, bottleneck_res_y, bottleneck_num_filters, num_styles,
                                 name="StyleTransferModel"):
     log.info(f"Using {num_styles} styles")
-    contract_blocks = [
-        contract(input_shape, 32, 9, 1, name="0"),
-        contract(calc_next_conv_dims(input_shape, 32, 1), 64, 3, 2, name="1"),
-        contract(calc_next_conv_dims(input_shape, 64, 2 ** -1), 128, 3, 2, name="2"),
-    ]
 
-    res_input_shape = calc_next_conv_dims(input_shape, 128, 2 ** -2)
+    num_contract_blocks = math.ceil(math.log2(input_shape[0]) - math.log2(bottleneck_res_y))
+    contract_filter_sizes = [
+        (64, 3, 2),
+        (128, 3, 2),
+        (128, 3, 2),
+        (128, 3, 2),
+    ]
+    contract_blocks = [contract(input_shape, 32, 9, 1, name="start")]
+    contract_blocks += [
+        contract(calc_next_conv_dims(input_shape, 32 if i == 0 else contract_filter_sizes[i - 1][0], 2 ** -i),
+                 filters=contract_filter_sizes[i][0],
+                 size=contract_filter_sizes[i][1],
+                 strides=contract_filter_sizes[i][2],
+                 name=str(i))
+        for i in range(num_contract_blocks)
+    ]
+    res_input_shape1 = calc_next_conv_dims(input_shape, bottleneck_num_filters, 2 ** -num_contract_blocks)
+    res_input_shape0 = calc_next_conv_dims(input_shape, contract_filter_sizes[num_contract_blocks - 1][0],
+                                           2 ** -num_contract_blocks)
+    log.info(
+        f"Contracting with {num_contract_blocks} blocks to {res_input_shape0[1]}x{res_input_shape0[0]}x{bottleneck_num_filters}")
+
     residual_blocks = [
-        residual_block(res_input_shape, num_styles, 128, 3, 1, name="0"),
-        residual_block(res_input_shape, num_styles, 128, 3, 1, name="1"),
-        residual_block(res_input_shape, num_styles, 128, 3, 1, name="2"),
-        residual_block(res_input_shape, num_styles, 128, 3, 1, name="3"),
-        residual_block(res_input_shape, num_styles, 128, 3, 1, name="4"),
+        residual_block(res_input_shape0, num_styles, bottleneck_num_filters, 3, 1, name="0", is_first=True),
+        residual_block(res_input_shape1, num_styles, bottleneck_num_filters, 3, 1, name="1"),
+        residual_block(res_input_shape1, num_styles, bottleneck_num_filters, 3, 1, name="2"),
+        residual_block(res_input_shape1, num_styles, bottleneck_num_filters, 3, 1, name="3"),
+        residual_block(res_input_shape1, num_styles, bottleneck_num_filters, 3, 1, name="4"),
     ]
 
-    expand_blocks = [
-        expand(input_shape=res_input_shape, name="0", num_styles=num_styles,
-               filters=64, size=3, strides=2),
-        expand(input_shape=calc_next_conv_dims(res_input_shape, 64, 2 ** 1), name="1", num_styles=num_styles,
-               filters=32, size=3, strides=2),
-        expand(input_shape=calc_next_conv_dims(res_input_shape, 32, 2 ** 2), name="2", num_styles=num_styles,
-               filters=3, size=9, strides=1,
-               activation=tf.nn.sigmoid),
+    expand_filter_sizes = [
+        (64, 3, 2),
+        (32, 3, 2),
+        (16, 3, 2),
+        (8, 3, 2),
+        (3, 3, 2),
+        (3, 3, 2),
+        (3, 3, 2),
+        (3, 3, 2),
     ]
+
+    num_expand_blocks = math.ceil(math.log2(output_shape[0]) - math.log2(res_input_shape1[0]))
+    log.info(f"expanding with {num_expand_blocks} blocks to {output_shape[1]}x{output_shape[0]}x{output_shape[2]}")
+    expand_blocks = [
+        expand(input_shape=calc_next_conv_dims(
+            res_input_shape1,
+            bottleneck_num_filters if i == 0 else expand_filter_sizes[i - 1][0], 2 ** i),
+            name=str(i), num_styles=num_styles,
+            filters=expand_filter_sizes[i][0], size=expand_filter_sizes[i][1], strides=expand_filter_sizes[i][2])
+        for i in range(num_expand_blocks)
+    ]
+
+    expand_blocks.append(
+        expand(input_shape=calc_next_conv_dims(
+            res_input_shape1,
+            expand_filter_sizes[num_expand_blocks - 1][0],
+            2 ** num_expand_blocks),
+            name="last", num_styles=num_styles,
+            filters=3, size=9, strides=1,
+            activation=tf.nn.sigmoid), )
 
     num_style_parameters = (sum(map(lambda block_w_params: block_w_params[1], residual_blocks)) +
                             sum(map(lambda block_w_params: block_w_params[1], expand_blocks)))
 
     inputs = {'content': tf.keras.layers.Input(shape=input_shape),
               'style_weights': tf.keras.layers.Input(
-                  shape=ConditionalInstanceNormalization.get_style_weights_shape(input_shape, num_styles - 1)),
+                  shape=ConditionalInstanceNormalization.get_style_weights_shape(output_shape, num_styles - 1)),
               'style_params': tf.keras.layers.Input(
                   shape=(num_styles, num_style_parameters)
               )}
@@ -232,21 +270,20 @@ def create_style_transfer_model(input_shape, num_styles,
                                                         inputs['style_weights'],
                                                         inputs['style_params'])
 
-    with tf.name_scope("expand_style_params"):
-        style_params_input = tf.expand_dims(style_params_input, 1, name="expand_style_params_0")
-        # style_params_input = tf.expand_dims(style_params_input, 1, name="expand_style_params_1")
-
-    x = content_input
-    for contract_block in contract_blocks:
-        x = contract_block(x)
-
+    assert style_weights.shape[-3] == output_shape[-3] and style_weights.shape[-2] == output_shape[-2], \
+        f"Style weights must be the same dimensions as the output shape. {style_weights.shape} vs. {output_shape}"
     sum_of_weights = tf.reduce_sum(style_weights, axis=-1, keepdims=True)
     style_weights = tf.concat(
         [
             1 - sum_of_weights,
             style_weights,
         ], axis=-1)
-    style_weights_mips = _get_style_weight_mips(style_weights)
+    style_weights_mips = _get_style_weight_mips(style_weights, num_expand_blocks + 1)
+    style_params_input = tf.expand_dims(style_params_input, 1, name="expand_style_params_0")
+
+    x = content_input
+    for contract_block in contract_blocks:
+        x = contract_block(x)
 
     style_params_stack = StyleParamStack(style_params_input, style_weights)
     for residual_block_layer, num_style_features in residual_blocks:
@@ -269,14 +306,14 @@ def create_style_transfer_model(input_shape, num_styles,
     return model, num_style_parameters
 
 
-def _get_style_weight_mips(style_weights):
+def _get_style_weight_mips(style_weights, num_mips):
     with tf.name_scope("style_weight_mips"):
         style_weights_mips = {}
         downsample_half_layer = tf.keras.layers.AvgPool2D(2)
         last_style_weights_mip = style_weights
-        last_style_weights_mip = style_weights_mips[last_style_weights_mip.shape[-2]] = last_style_weights_mip
-        last_style_weights_mip = style_weights_mips[last_style_weights_mip.shape[-2]] = downsample_half_layer(
-            last_style_weights_mip)
-        last_style_weights_mip = style_weights_mips[last_style_weights_mip.shape[-2]] = downsample_half_layer(
-            last_style_weights_mip)
+        style_weights_mips[last_style_weights_mip.shape[-2]] = last_style_weights_mip
+        for i in range(num_mips):
+            last_style_weights_mip = style_weights_mips[last_style_weights_mip.shape[-2]] = downsample_half_layer(
+                last_style_weights_mip)
+
         return style_weights_mips
