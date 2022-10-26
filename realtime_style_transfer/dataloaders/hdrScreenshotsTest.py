@@ -3,7 +3,7 @@ from .common import content_hdr_debug_image_dir
 from pathlib import Path
 import unittest
 import tensorflow as tf
-from commonTest import TEST_SCREENSHOT_PNG_FILE
+from .commonTest import TEST_SCREENSHOT_PNG_FILE
 
 
 class HdrScreenshotLoaderTests(unittest.TestCase):
