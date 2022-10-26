@@ -117,8 +117,14 @@ def image_dataset_from_filepaths(filepaths, shape, **kwargs) -> tf.data.Dataset:
             except Exception as e:
                 log.warning(f"Could not read image {imagepath}: {e}")
 
+    output_signature = tf.TensorSpec(shape)
+    if 'output_shape' in kwargs:
+        output_shape = kwargs['output_shape']
+        output_signature = (output_signature, tf.TensorSpec(output_shape))
+
     dataset = tf.data.Dataset.from_generator(generate_image_tensors,
-                                             output_signature=tf.TensorSpec(shape))
+                                             output_signature=output_signature,
+                                             name="image_dataset_from_filepaths")
     dataset.num_samples = len(filepaths)
     return dataset
 
@@ -154,7 +160,8 @@ def pair_up_content_and_style_datasets(content_dataset, style_dataset, shapes, *
         }
         output_signature = (output_signature, ground_truth_data)
 
-    paired_dataset = tf.data.Dataset.from_generator(_pair_up_dataset, output_signature=output_signature)
+    paired_dataset = tf.data.Dataset.from_generator(_pair_up_dataset, output_signature=output_signature,
+                                                    name="pair_up_content_and_style_datasets")
     paired_dataset.num_samples = min(content_dataset.num_samples, style_dataset.num_samples)
     return paired_dataset
 

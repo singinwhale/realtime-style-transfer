@@ -54,7 +54,8 @@ class StyleTransferTrainingModelTest(unittest.TestCase):
             output_signature=({name: tf.TensorSpec(shape, name=name)
                                for name, shape in self.input_shape.items()},
                               {name: tf.TensorSpec(shape, name=name)
-                               for name, shape in self.ground_truth_shape.items()})
+                               for name, shape in self.ground_truth_shape.items()}),
+            name="single_input_generator"
         )
         inputs = inputs.batch(2)
         self.trainingModel.training.fit(inputs)

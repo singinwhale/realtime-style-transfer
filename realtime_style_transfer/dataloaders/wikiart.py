@@ -179,10 +179,10 @@ def _get_dataset(shapes, batch_size, content_image_directory, **kwargs) -> (tf.d
 
     training_dataset = common.pair_up_content_and_style_datasets(content_dataset=training_content_dataset,
                                                                  style_dataset=training_style_dataset,
-                                                                 shapes=shapes_without_batches)
+                                                                 shapes=shapes_without_batches, **kwargs)
     validation_dataset = common.pair_up_content_and_style_datasets(content_dataset=validation_content_dataset,
                                                                    style_dataset=validation_style_dataset,
-                                                                   shapes=shapes_without_batches)
+                                                                   shapes=shapes_without_batches, **kwargs)
 
     num_training_samples, num_validation_samples = training_dataset.num_samples, validation_dataset.num_samples
 
@@ -272,8 +272,10 @@ def _get_dataset_debug(shapes, batch_size, content_image_directory, **kwargs) ->
         cache_dir = kwargs["cache_dir"]
         cache_path = Path(cache_dir)
         cache_path.mkdir(parents=True, exist_ok=True)
-        training_dataset = training_dataset.cache(filename=str(cache_path / "debug_training_dataset"))
-        validation_dataset = validation_dataset.cache(filename=str(cache_path / "debug_validation_dataset"))
+        training_dataset = training_dataset.cache(filename=str(cache_path / "debug_training_dataset"),
+                                                  name="cached_training_dataset")
+        validation_dataset = validation_dataset.cache(filename=str(cache_path / "debug_validation_dataset"),
+                                                      name="cached_validation_dataset")
         log.info(f"Caching datasets into {cache_dir}. This could take a while")
         for name, dataset in {"training_dataset": training_dataset, "validation_dataset": validation_dataset}.items():
             # immediately cache everything
@@ -284,9 +286,9 @@ def _get_dataset_debug(shapes, batch_size, content_image_directory, **kwargs) ->
                     pass
 
     if batch_size is not None:
-        training_dataset = training_dataset.batch(batch_size)
+        training_dataset = training_dataset.batch(batch_size, name="batched_training_dataset")
         training_dataset.num_samples = num_images
-        validation_dataset = validation_dataset.batch(batch_size)
+        validation_dataset = validation_dataset.batch(batch_size, name="batched_validation_dataset")
         validation_dataset.num_samples = num_images
 
     return training_dataset, validation_dataset
