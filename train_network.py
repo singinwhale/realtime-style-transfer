@@ -58,7 +58,9 @@ config = ShapeConfig(hdr=True, num_styles=1)
 
 # training_dataset, validation_dataset = wikiart.get_dataset_debug(input_shape, batch_size=8,
 #                                                           cache_dir=cache_root_dir, seed=347890842)
-training_dataset, validation_dataset = wikiart.get_hdr_dataset(config.input_shape, batch_size=4,
+training_dataset, validation_dataset = wikiart.get_hdr_dataset(config.input_shape,
+                                                               batch_size=4,
+                                                               output_shape=config.output_shape,
                                                                cache_dir=cache_root_dir,
                                                                seed=34789082,
                                                                channels=config.channels)
