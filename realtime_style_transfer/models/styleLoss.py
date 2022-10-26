@@ -98,9 +98,10 @@ class StyleLossModelVGG(StyleLossModelBase):
         self.style_layers = style_layers
         self.content_layers = content_layers
         self.num_style_layers = len(style_layers)
-        self.content_loss_factor = 1e-3
-        self.style_loss_factor = 0.5e-8
+        self.content_loss_factor = 1e4
+        self.style_loss_factor = 1e-3
         self.total_variation_loss_factor = 1e-1
+        self.depth_loss_factor = 1e-2
 
     def call(self, inputs, **kwargs):
         inputs = inputs * 255.0
@@ -180,9 +181,10 @@ class StyleLossModelMobileNet(StyleLossModelBase):
         self.style_layers = style_layer_names
         self.content_layers = content_layer_names
         self.num_style_layers = len(style_layer_names)
-        self.content_loss_factor = 1e-4
-        self.style_loss_factor = 0.5e-3
+        self.content_loss_factor = 1e-3
+        self.style_loss_factor = 1
         self.total_variation_loss_factor = 1e-3
+        self.depth_loss_factor = 1e-4
 
     def call(self, inputs, **kwargs):
         """Expects float input in [0,1] but rescales it to [-1, 1]
@@ -276,14 +278,14 @@ def get_depth_loss_func(input_shape):
         resized_ground_truth_image = resizing_layer(ground_truth_image)
         predicted_depth = midas_model(tf.transpose(resized_predicted_image, [0, 3, 1, 2]))
         ground_truth_depth = midas_model(tf.transpose(resized_ground_truth_image, [0, 3, 1, 2]))
-        return l2_loss_on_batch(ground_truth_depth - predicted_depth)
+        return mean_l2_loss_on_batch(ground_truth_depth - predicted_depth)
 
     return depth_loss
 
 
-def l2_loss_on_batch(tensor):
+def mean_l2_loss_on_batch(tensor):
     axis = list(range(1, len(tensor.shape)))
-    return tf.reduce_sum(0.5 * tensor ** 2, axis=axis)
+    return tf.reduce_mean(0.5 * tensor ** 2, axis=axis)
 
 
 def make_style_loss_function(loss_feature_extractor_model: StyleLossModelBase, output_shape, num_styles):
@@ -312,19 +314,17 @@ def make_style_loss_function(loss_feature_extractor_model: StyleLossModelBase, o
     output_style_features: tf.Tensor = loss_data_prediction['style']
 
     feature_loss = tf.reduce_mean([
-        l2_loss_on_batch(tf.cast(out_value, tf.float32) - tf.cast(in_value, tf.float32)) *
-        loss_feature_extractor_model.content_loss_factor
+        mean_l2_loss_on_batch(tf.cast(out_value, tf.float32) - tf.cast(in_value, tf.float32))
         for (input_layer, in_value), (out_layer, out_value)
         in zip(input_feature_values.items(), output_feature_values.items())
-    ], axis=[0])
+    ], axis=[0]) * loss_feature_extractor_model.content_loss_factor
 
     gram_matrix_model = get_gram_matrix_model((None, None, None))
     style_loss = tf.reduce_mean([
-        l2_loss_on_batch((gram_matrix_model(out_value) - gram_matrix_model(in_value))) *
-        loss_feature_extractor_model.style_loss_factor
+        mean_l2_loss_on_batch((gram_matrix_model(out_value) - gram_matrix_model(in_value)))
         for (input_layer, in_value), (out_layer, out_value)
         in zip(input_style_features.items(), output_style_features.items())
-    ], axis=[0])
+    ], axis=[0]) * loss_feature_extractor_model.style_loss_factor
 
     total_variation_loss = tf.image.total_variation(input_prediction, 'total_variation_loss') * \
                            loss_feature_extractor_model.total_variation_loss_factor

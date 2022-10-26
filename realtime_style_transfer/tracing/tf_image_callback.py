@@ -25,9 +25,9 @@ class SummaryImageCallback(tf.keras.callbacks.Callback):
 
     def write_sample(self, index):
         start = time.perf_counter()
-        validation_prediction = self.model.predict(self.validation_datapoint[0])
+        validation_prediction = self.model.predict(self.validation_datapoint[0], verbose=0)
         end = time.perf_counter()
-        training_prediction = self.model.predict(self.training_datapoint[0])
+        training_prediction = self.model.predict(self.training_datapoint[0], verbose=0)
         tf.summary.scalar('prediction_time', start - end, step=index,
                           description="Duration of the training in seconds")
         tf.summary.image('validation_prediction', validation_prediction, step=index)
