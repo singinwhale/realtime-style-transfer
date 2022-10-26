@@ -19,4 +19,4 @@ class MetricsCallback(tf.keras.callbacks.Callback):
                 log = log[4:]
                 writer = validation_writer
             with writer.as_default(epoch):
-                tf.summary.scalar(log, value)
+                tf.summary.scalar(log, tf.reduce_mean(value))
