@@ -59,7 +59,7 @@ config = ShapeConfig(hdr=True, num_styles=1)
 # training_dataset, validation_dataset = wikiart.get_dataset_debug(input_shape, batch_size=8,
 #                                                           cache_dir=cache_root_dir, seed=347890842)
 training_dataset, validation_dataset = wikiart.get_hdr_dataset(config.input_shape,
-                                                               batch_size=4,
+                                                               batch_size=2,
                                                                output_shape=config.output_shape,
                                                                cache_dir=cache_root_dir,
                                                                seed=34789082,
@@ -117,7 +117,7 @@ with summary_writer.as_default() as summary:
 
     # write_model_histogram_summary(style_transfer_training_model.training, -1)
     # with tf.profiler.experimental.Profile(str(log_dir)) as profiler:
-    style_transfer_training_model.training.fit(x=training_dataset.prefetch(2), validation_data=validation_dataset,
+    style_transfer_training_model.training.fit(x=training_dataset.prefetch(2), validation_data=validation_dataset.prefetch(2),
                                                epochs=300,
                                                initial_epoch=continue_from[1] if continue_from else 0,
                                                callbacks=[  # tensorboard_callback,
