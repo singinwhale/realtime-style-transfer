@@ -150,6 +150,7 @@ def residual_block(input_shape: typing.Tuple, num_styles, filters, size, strides
         'style_params': style_params_input,
     }
     style_params = StyleParamStack(style_params_input, style_weights_input)
+    activation = tf.keras.layers.ReLU()
 
     fx = content_input
     for i in range(num_conv_and_norms):
@@ -162,6 +163,10 @@ def residual_block(input_shape: typing.Tuple, num_styles, filters, size, strides
                 filters * ConditionalInstanceNormalization.NumParamsPerFeature
             )
         )
+
+        # no activation on last layer
+        if i < (num_conv_and_norms - 1):
+            fx = activation(fx)
 
     out = fx if is_first else tf.keras.layers.Add()([content_input, fx])
     return (tf.keras.models.Model(inputs, out, name=f"{name}"), num_style_params)
