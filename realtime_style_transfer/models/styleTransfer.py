@@ -24,11 +24,13 @@ class StyleParamStack:
             return self.style_params[..., lower_bound:upper_bound]
 
     def make_content_and_style_input(self, content, num_params):
-        return {
+        inputs = {
             'content': content,
-            'style_weights': self.style_weights,
             'style_params': self.get_params(num_params)
         }
+        if self.style_weights is not None:
+            inputs['style_weights'] = self.style_weights
+        return inputs
 
 
 def _apply_style_weights(style_weights, style_params):
@@ -55,7 +57,7 @@ class ConditionalInstanceNormalization(tf.keras.layers.Layer):
     def call(self, x, **kwargs):
         inputs = x
         x = inputs['content']
-        style_weights = inputs['style_weights']
+        style_weights = inputs['style_weights'] if self.num_styles > 1 else None
         style_params = StyleParamStack(inputs['style_params'], style_weights)
         scale = _apply_style_weights(style_weights, style_params.get_params(self.num_feature_maps))
         bias = _apply_style_weights(style_weights, style_params.get_params(self.num_feature_maps))
@@ -95,24 +97,21 @@ def expand(input_shape: typing.Tuple, num_styles, filters, size, strides, name, 
     initializer = tf.random_normal_initializer(0., 0.02)
 
     content_inputs = tf.keras.layers.Input(shape=input_shape, dtype=tf.float32, name="input_content")
-    style_weights_input = tf.keras.Input(
-        shape=ConditionalInstanceNormalization.get_style_weights_shape(
-            input_shape,
-            num_styles,
-            multiplier=strides
-        ),
-        name="style_weights_input")
+    style_weights_input = None
+    if num_styles > 1:
+        style_weights_input = tf.keras.Input(
+            shape=ConditionalInstanceNormalization.get_style_weights_shape(
+                input_shape,
+                num_styles,
+                multiplier=strides
+            ),
+            name="style_weights_input")
 
     style_params_shape, num_style_params = ConditionalInstanceNormalization.get_style_params_shape_and_num(
         filters,
         num_styles
     )
     style_params = tf.keras.layers.Input(shape=style_params_shape, name="input_scale")
-    inputs = {
-        "content": content_inputs,
-        "style_weights": style_weights_input,
-        "style_params": style_params,
-    }
     result = tf.keras.layers.Conv2DTranspose(
         filters=filters, kernel_size=size, strides=strides, padding='same',
         kernel_initializer=initializer,
@@ -120,12 +119,21 @@ def expand(input_shape: typing.Tuple, num_styles, filters, size, strides, name, 
 
     instance_norm_args = {
         "content": result,
-        "style_weights": style_weights_input,
         "style_params": style_params,
     }
+    if style_weights_input is not None:
+        instance_norm_args["style_weights"] = style_weights_input
+
     result = ConditionalInstanceNormalization(filters, num_styles, 0)(instance_norm_args)
 
     result = tf.keras.layers.Activation(activation)(result)
+
+    inputs = {
+        "content": content_inputs,
+        "style_params": style_params,
+    }
+    if style_weights_input is not None:
+        inputs["style_weights"] = style_weights_input
 
     expand_block_model = tf.keras.Model(inputs, result, name=name)
     upscale_factor = strides
@@ -136,9 +144,11 @@ def residual_block(input_shape: typing.Tuple, num_styles, filters, size, strides
     name = f"residual_block_{name}"
     initializer = tf.random_uniform_initializer(0., 0.05)
     content_input = tf.keras.Input(shape=input_shape, name="content_input")
-    style_weights_input = tf.keras.Input(
-        shape=ConditionalInstanceNormalization.get_style_weights_shape(input_shape, num_styles),
-        name="style_weights_input")
+    style_weights_input = None
+    if num_styles > 1:
+        style_weights_input = tf.keras.Input(
+            shape=ConditionalInstanceNormalization.get_style_weights_shape(input_shape, num_styles),
+            name="style_weights_input")
     num_conv_and_norms = 2
     style_params_shape, num_style_params = \
         ConditionalInstanceNormalization.get_style_params_shape_and_num(filters * num_conv_and_norms, num_styles)
@@ -146,9 +156,11 @@ def residual_block(input_shape: typing.Tuple, num_styles, filters, size, strides
     style_params_input = tf.keras.Input(shape=style_params_shape, name="style_params_input")
     inputs = {
         'content': content_input,
-        'style_weights': style_weights_input,
         'style_params': style_params_input,
     }
+    if num_styles > 1:
+        inputs['style_weights'] = style_weights_input
+
     style_params = StyleParamStack(style_params_input, style_weights_input)
     activation = tf.keras.layers.ReLU()
 
@@ -266,24 +278,29 @@ def create_style_transfer_model(input_shape, output_shape, bottleneck_res_y, bot
                             sum(map(lambda block_w_params: block_w_params[1], expand_blocks)))
 
     inputs = {'content': tf.keras.layers.Input(shape=input_shape),
-              'style_weights': tf.keras.layers.Input(
-                  shape=ConditionalInstanceNormalization.get_style_weights_shape(output_shape, num_styles - 1)),
               'style_params': tf.keras.layers.Input(
                   shape=(num_styles, num_style_parameters)
               )}
-    content_input, style_weights, style_params_input = (inputs['content'],
-                                                        inputs['style_weights'],
-                                                        inputs['style_params'])
+    content_input, style_params_input = (inputs['content'],
+                                         inputs['style_params'])
 
-    assert style_weights.shape[-3] == output_shape[-3] and style_weights.shape[-2] == output_shape[-2], \
-        f"Style weights must be the same dimensions as the output shape. {style_weights.shape} vs. {output_shape}"
-    sum_of_weights = tf.reduce_sum(style_weights, axis=-1, keepdims=True)
-    style_weights = tf.concat(
-        [
-            1 - sum_of_weights,
-            style_weights,
-        ], axis=-1)
-    style_weights_mips = _get_style_weight_mips(style_weights, num_expand_blocks + 1)
+    style_weights = None
+    style_weights_mips = None
+    if num_styles > 1:
+        style_weights = tf.keras.layers.Input(
+            shape=ConditionalInstanceNormalization.get_style_weights_shape(output_shape, num_styles - 1))
+        inputs['style_weights'] = style_weights
+
+        assert style_weights.shape[-3] == output_shape[-3] and style_weights.shape[-2] == output_shape[-2], \
+            f"Style weights must be the same dimensions as the output shape. {style_weights.shape} vs. {output_shape}"
+        sum_of_weights = tf.reduce_sum(style_weights, axis=-1, keepdims=True)
+        style_weights = tf.concat(
+            [
+                1 - sum_of_weights,
+                style_weights,
+            ], axis=-1)
+        style_weights_mips = _get_style_weight_mips(style_weights, num_expand_blocks + 1)
+
     style_params_input = tf.expand_dims(style_params_input, 1, name="expand_style_params_0")
 
     x = content_input
@@ -294,7 +311,7 @@ def create_style_transfer_model(input_shape, output_shape, bottleneck_res_y, bot
     for residual_block_layer, num_style_features in residual_blocks:
         x = {
             'content': x,
-            'style_weights': style_weights_mips[x.shape[-2]],
+            'style_weights': style_weights_mips[x.shape[-2]] if style_weights_mips is not None else None,
             'style_params': style_params_stack.get_params(num_style_features)
         }
         x = residual_block_layer(x)
@@ -302,7 +319,8 @@ def create_style_transfer_model(input_shape, output_shape, bottleneck_res_y, bot
     for expand_block, num_style_features, upscale_factor in expand_blocks:
         x = {
             'content': x,
-            'style_weights': style_weights_mips[x.shape[-2] * upscale_factor],
+            'style_weights': style_weights_mips[
+                x.shape[-2] * upscale_factor] if style_weights_mips is not None else None,
             'style_params': style_params_stack.get_params(num_style_features)
         }
         x = expand_block(x)

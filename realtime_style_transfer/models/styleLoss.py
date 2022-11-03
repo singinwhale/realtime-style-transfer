@@ -336,6 +336,7 @@ def make_style_loss_function(loss_feature_extractor_model: StyleLossModelBase, o
                  tf.cast(style_loss, tf.float32) + \
                  tf.cast(total_variation_loss, tf.float32) + \
                  depth_loss
+
     output = {
         "loss": total_loss,
         "feature_loss": feature_loss,

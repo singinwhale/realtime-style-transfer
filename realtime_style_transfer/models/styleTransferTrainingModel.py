@@ -29,7 +29,8 @@ class StyleTransferTrainingModel(tf.keras.Model):
         return losses['loss']
 
     def compute_metrics(self, x, y, y_pred, sample_weight):
-        return self.style_losses
+        losses = {n: tf.reduce_mean(l) for n, l in self.style_losses.items()}
+        return losses
 
     def reset_metrics(self):
         self.style_losses = {}
