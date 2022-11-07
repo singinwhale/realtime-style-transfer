@@ -22,6 +22,8 @@ outpath = args.outpath
 
 from realtime_style_transfer.shape_config import ShapeConfig
 
+tf.keras.mixed_precision.set_global_policy('mixed_float16')
+
 config = ShapeConfig(hdr=True, num_styles=1)
 
 content_dataset = hdrScreenshots.get_unreal_hdr_screenshot_dataset(wikiart.content_hdr_image_dir / "training", config.channels,
@@ -47,7 +49,8 @@ style_transfer_training_model = styleTransferTrainingModel.make_style_transfer_t
     style_loss_func_factory_func=lambda: styleLoss.make_style_loss_function(
         style_loss_model,
         config.output_shape,
-        config.num_styles),
+        config.num_styles,
+        config.with_depth_loss),
 )
 element = {
     'content': tf.zeros((1,) + config.input_shape['content']),

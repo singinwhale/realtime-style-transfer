@@ -288,7 +288,8 @@ def mean_l2_loss_on_batch(tensor):
     return tf.reduce_mean(0.5 * tensor ** 2, axis=axis)
 
 
-def make_style_loss_function(loss_feature_extractor_model: StyleLossModelBase, output_shape, num_styles):
+def make_style_loss_function(loss_feature_extractor_model: StyleLossModelBase, output_shape, num_styles,
+                             with_depth_loss=True):
     loss_feature_extractor_model.trainable = False
     inputs = {
         'prediction': tf.keras.Input(output_shape),
@@ -329,21 +330,26 @@ def make_style_loss_function(loss_feature_extractor_model: StyleLossModelBase, o
     total_variation_loss = tf.image.total_variation(input_prediction, 'total_variation_loss') * \
                            loss_feature_extractor_model.total_variation_loss_factor
 
-    depth_loss = get_depth_loss_func(output_shape[:-1])(input_ground_truth, input_prediction) * \
-                 loss_feature_extractor_model.depth_loss_factor
+    if with_depth_loss:
+        depth_loss = get_depth_loss_func(output_shape[:-1])(input_ground_truth, input_prediction) * \
+                     loss_feature_extractor_model.depth_loss_factor
 
     total_loss = tf.cast(feature_loss, tf.float32) + \
                  tf.cast(style_loss, tf.float32) + \
-                 tf.cast(total_variation_loss, tf.float32) + \
-                 depth_loss
+                 tf.cast(total_variation_loss, tf.float32)
+
+    if with_depth_loss:
+        total_loss += depth_loss
 
     output = {
         "loss": total_loss,
         "feature_loss": feature_loss,
         "style_loss": style_loss,
         "total_variation_loss": total_variation_loss,
-        "depth_loss": depth_loss,
     }
+    if with_depth_loss:
+        output['depth_loss'] = depth_loss
+
     model = tf.keras.Model(inputs, output, name="StyleLoss")
     model.trainable = False
 

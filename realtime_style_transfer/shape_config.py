@@ -1,8 +1,9 @@
 from realtime_style_transfer.models import stylePrediction
 
+
 class ShapeConfig:
     def __init__(self, num_styles=1, hdr=True):
-        self.bottleneck_res_y = 32
+        self.bottleneck_res_y = 120
         self.bottleneck_num_filters = 128
         resolution_divider = 2
         self.num_styles = num_styles
@@ -34,6 +35,7 @@ class ShapeConfig:
 
         self.input_shape = self.hdr_input_shape if hdr else self.sdr_input_shape
         self.style_feature_extractor_type = stylePrediction.StyleFeatureExtractor.MOBILE_NET
+        self.with_depth_loss = False
 
     def __str__(self):
         import json

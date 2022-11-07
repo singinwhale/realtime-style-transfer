@@ -31,13 +31,12 @@ import realtime_style_transfer.tracing as tracing
 log = logging.getLogger()
 
 continue_from = None
-# continue_from = ("2022-10-24-11-36-41.448565", 85)
+# continue_from = ("2022-11-03-18-37-47.818157", 0)
 
 cache_root_dir = Path(__file__).parent / 'cache'
 cache_root_dir.mkdir(exist_ok=True)
 log_root_dir = Path(__file__).parent / 'logs'
-log_dir = log_root_dir / (
-    str(datetime.datetime.now().strftime("%Y-%m-%d-%H-%M-%S.%f")) if continue_from is None else continue_from[0])
+log_dir = log_root_dir / str(datetime.datetime.now().strftime("%Y-%m-%d-%H-%M-%S.%f")) if continue_from is None else continue_from[0]
 log_dir.mkdir(exist_ok=True, parents=True, )
 tracing.logsetup.enable_logfile(log_dir)
 
@@ -96,19 +95,23 @@ with summary_writer.as_default() as summary:
             num_styles=config.num_styles),
         style_loss_func_factory_func=lambda: styleLoss.make_style_loss_function(style_loss_model,
                                                                                 config.output_shape,
-                                                                                config.num_styles,),
+                                                                                config.num_styles,
+                                                                                config.with_depth_loss),
     )
 
     style_transfer_training_model.training.compile(run_eagerly=False)  # True for Debugging, False for performance
-
+    style_transfer_training_model.training.build(input_shape={n: (None,) + s for n, s in config.input_shape.items()})
     if continue_from is not None:
-        latest_epoch_weights_path = log_root_dir / continue_from[0] / "checkpoints" / "latest_epoch_weights"
-        log.info(f"Loading weights from {latest_epoch_weights_path}")
+        latest_epoch_checkpoint_path = log_root_dir / continue_from[0] / "checkpoints" / "latest_epoch_checkpoint"
+        log.info(f"Loading checkpoint from {latest_epoch_checkpoint_path}")
         try:
-            style_transfer_training_model.training.load_weights(latest_epoch_weights_path)
+            checkpoint = tf.train.Checkpoint(style_transfer_training_model.inference)
+            load_status = checkpoint.restore(str(latest_epoch_checkpoint_path))
+            load_status.assert_nontrivial_match()
             pass
         except Exception as e:
             log.warning(f"Could not load weights: {e}")
+            raise e
 
     summary_text = capture_model_summary(style_transfer_training_model.training)
     tf.summary.text('summary', f"```\n{summary_text}\n```", -1)
