@@ -24,5 +24,5 @@ class CheckpointCallback(tf.keras.callbacks.Callback):
                                                                  max_to_keep=5,
                                                                  step_counter=self.step)
         self.checkpoint_manager.save(epoch, check_interval=True)
-        self.checkpoint.write(str(self.log_dir / "latest_epoch_checkpoint"))
+        self.checkpoint.save(str(self.log_dir / "latest_epoch_checkpoint"))
         self.model.save_weights(str(self.log_dir / "latest_epoch_weights"))

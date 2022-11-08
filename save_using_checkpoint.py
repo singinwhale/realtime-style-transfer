@@ -58,7 +58,7 @@ style_transfer_training_model.training(element)
 log.info(f"Loading Checkpoint...")
 checkpoint = tf.train.Checkpoint(style_transfer_training_model.training)
 load_status = checkpoint.restore(str(checkpoint_path))
-# load_status = style_transfer_training_model.inference.load_weights(filepath=str())
+# load_status = style_transfer_training_model.inference.load_weights(filepath=str(checkpoint_path))
 load_status.assert_nontrivial_match()
 
 predictor_path = outpath.with_suffix(".predictor.tf")

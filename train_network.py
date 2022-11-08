@@ -31,12 +31,12 @@ import realtime_style_transfer.tracing as tracing
 log = logging.getLogger()
 
 continue_from = None
-# continue_from = ("2022-11-03-18-37-47.818157", 0)
+continue_from = ("2022-11-07-18-30-03.746340", 41)
 
 cache_root_dir = Path(__file__).parent / 'cache'
 cache_root_dir.mkdir(exist_ok=True)
 log_root_dir = Path(__file__).parent / 'logs'
-log_dir = log_root_dir / str(datetime.datetime.now().strftime("%Y-%m-%d-%H-%M-%S.%f")) if continue_from is None else continue_from[0]
+log_dir = log_root_dir / str(datetime.datetime.now().strftime("%Y-%m-%d-%H-%M-%S.%f") if continue_from is None else continue_from[0])
 log_dir.mkdir(exist_ok=True, parents=True, )
 tracing.logsetup.enable_logfile(log_dir)
 
@@ -58,7 +58,7 @@ config = ShapeConfig(hdr=True, num_styles=1)
 # training_dataset, validation_dataset = wikiart.get_dataset_debug(input_shape, batch_size=8,
 #                                                           cache_dir=cache_root_dir, seed=347890842)
 training_dataset, validation_dataset = wikiart.get_hdr_dataset(config.input_shape,
-                                                               batch_size=2,
+                                                               batch_size=4,
                                                                output_shape=config.output_shape,
                                                                cache_dir=cache_root_dir,
                                                                seed=34789082,
@@ -108,6 +108,7 @@ with summary_writer.as_default() as summary:
             checkpoint = tf.train.Checkpoint(style_transfer_training_model.inference)
             load_status = checkpoint.restore(str(latest_epoch_checkpoint_path))
             load_status.assert_nontrivial_match()
+            log.info(f"Continuing at epoch {checkpoint.save_counter.value()}")
             pass
         except Exception as e:
             log.warning(f"Could not load weights: {e}")
@@ -120,9 +121,11 @@ with summary_writer.as_default() as summary:
 
     # write_model_histogram_summary(style_transfer_training_model.training, -1)
     # with tf.profiler.experimental.Profile(str(log_dir)) as profiler:
-    style_transfer_training_model.training.fit(x=training_dataset.prefetch(2), validation_data=validation_dataset.prefetch(2),
+    style_transfer_training_model.training.fit(x=training_dataset.prefetch(2),
+                                               validation_data=validation_dataset.prefetch(2),
                                                epochs=300,
                                                initial_epoch=continue_from[1] if continue_from else 0,
+                                               # initial_epoch=checkpoint.save_counter.value() if continue_from else 0,
                                                callbacks=[  # tensorboard_callback,
                                                    image_callback,
                                                    checkpoint_callback,
