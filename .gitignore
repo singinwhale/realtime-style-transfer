@@ -1,7 +1,7 @@
 
 # transient data
 /data
-/logs
+/*logs
 /cache
 /temp
 

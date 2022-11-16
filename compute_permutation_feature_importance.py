@@ -28,7 +28,7 @@ class PermutationFeatureImportanceData():
 
     def __init__(self, num_samples):
         self.baseline_losses = {loss_name: 0.0 for loss_name in
-                                      ("loss", "style_loss", "feature_loss", "total_variation_loss")}
+                                      ("loss", "style_loss", "feature_loss", "total_variation_loss", "depth_loss")}
         self.channel_contributions = {loss_name: {n: 0.0 for n, c in config.channels}
                                       for loss_name in self.baseline_losses.keys()}
 
@@ -67,28 +67,39 @@ if permutation_importance_data_cache_file_path.exists():
 else:
 
     log.info("Loading dataset...")
-    training_dataset, validation_dataset = wikiart.get_hdr_dataset(config.input_shape, 1, channels=config.channels,
+    training_dataset, validation_dataset = wikiart.get_hdr_dataset(config.input_shape,
+                                                                   batch_size=1,
+                                                                   output_shape=config.output_shape,
+                                                                   cache_dir=cache_dir,
+                                                                   channels=config.channels,
                                                                    seed=278992)
 
     style_transfer_training_model = styleTransferTrainingModel.make_style_transfer_training_model(
-        config.input_shape,
         style_predictor_factory_func=lambda num_top_parameters: stylePrediction.create_style_prediction_model(
             config.input_shape['style'][1:], stylePrediction.StyleFeatureExtractor.MOBILE_NET, num_top_parameters
         ),
-        style_transfer_factory_func=lambda: styleTransfer.create_style_transfer_model(config.input_shape['content'],
-                                                                                      num_styles=num_styles),
-        style_loss_func_factory_func=lambda: styleLoss.make_style_loss_function(
-            styleLoss.StyleLossModelVGG(config.output_shape),
-            config.input_shape, config.output_shape)
+        style_transfer_factory_func=lambda: styleTransfer.create_style_transfer_model(
+            input_shape=config.input_shape['content'],
+            output_shape=config.output_shape,
+            bottleneck_res_y=config.bottleneck_res_y,
+            bottleneck_num_filters=config.bottleneck_num_filters,
+            num_styles=config.num_styles),
+        style_loss_func_factory_func=lambda: styleLoss.make_style_loss_function(styleLoss.StyleLossModelVGG(config.output_shape),
+                                                                                config.output_shape,
+                                                                                config.num_styles,
+                                                                                config.with_depth_loss),
     )
 
     # call once to build model
     log.info("Compiling model...")
-    style_transfer_training_model.training.compile(run_eagerly=False)
+    style_transfer_training_model.loss_model.compile(run_eagerly=True)
     log.info("Building model...")
-    style_transfer_training_model.training.build(config.input_shape)
+    style_transfer_training_model.loss_model(next(iter(validation_dataset)))
     log.info(f"Loading weights from {checkpoint_path}")
-    style_transfer_training_model.training.load_weights(filepath=str(checkpoint_path))
+    #load_status = style_transfer_training_model.loss_model.load_weights(filepath=str(checkpoint_path))
+    checkpoint = tf.train.Checkpoint(style_transfer_training_model.inference)
+    load_status = checkpoint.restore(str(checkpoint_path))
+    load_status.assert_nontrivial_match()
 
     log.info("Loading full dataset...")
     preloaded_validation_dataset = list(progressify(validation_dataset, total=validation_dataset.num_samples))
@@ -101,19 +112,21 @@ else:
         baseline_losses = style_transfer_training_model.loss_model(sample)
 
         for loss, loss_value in baseline_losses.items():
-            permutation_importance_data.baseline_losses[loss] += loss_value
+            prev_loss_value = permutation_importance_data.baseline_losses.setdefault(loss, 0)
+            permutation_importance_data.baseline_losses[loss] = prev_loss_value + loss_value
+
 
         for j, matched_sample in enumerate(progressify(matched_samples, leave=False, position=1, desc="Permutation")):
             component_lower_bound = 0
             for channel, num_components in progressify(config.channels, leave=False, position=2, desc="Channel"):
                 component_upper_bound = component_lower_bound + num_components
-                permuted_sample = dict(sample)
-                permuted_sample_content = permuted_sample['content'].numpy()
+                permuted_sample_x, permuted_sample_y = sample
+                permuted_sample_content = permuted_sample_x['content'].numpy()
                 permuted_sample_content[..., component_lower_bound:component_upper_bound] = \
-                    matched_sample['content'][..., component_lower_bound:component_upper_bound]
-                permuted_sample['content'] = permuted_sample_content
+                    matched_sample[0]['content'].numpy()[..., component_lower_bound:component_upper_bound]
+                permuted_sample_x['content'] = tf.convert_to_tensor(permuted_sample_content)
 
-                losses = style_transfer_training_model.loss_model(permuted_sample)
+                losses = style_transfer_training_model.loss_model((permuted_sample_x, permuted_sample_y))
                 for loss, loss_value in losses.items():
                     permutation_importance_data.channel_contributions[loss][channel] += loss_value \
                                                                                         - baseline_losses[loss]

@@ -31,7 +31,7 @@ import realtime_style_transfer.tracing as tracing
 log = logging.getLogger()
 
 continue_from = None
-continue_from = ("2022-11-07-18-30-03.746340", 41)
+continue_from = ("2022-11-14-11-37-49.531687", 41)
 
 cache_root_dir = Path(__file__).parent / 'cache'
 cache_root_dir.mkdir(exist_ok=True)
@@ -102,7 +102,7 @@ with summary_writer.as_default() as summary:
     style_transfer_training_model.training.compile(run_eagerly=False)  # True for Debugging, False for performance
     style_transfer_training_model.training.build(input_shape={n: (None,) + s for n, s in config.input_shape.items()})
     if continue_from is not None:
-        latest_epoch_checkpoint_path = log_root_dir / continue_from[0] / "checkpoints" / "latest_epoch_checkpoint"
+        latest_epoch_checkpoint_path = tf.train.latest_checkpoint(log_root_dir / continue_from[0] / "checkpoints" / "checkpoints")
         log.info(f"Loading checkpoint from {latest_epoch_checkpoint_path}")
         try:
             checkpoint = tf.train.Checkpoint(style_transfer_training_model.inference)
@@ -124,7 +124,7 @@ with summary_writer.as_default() as summary:
     style_transfer_training_model.training.fit(x=training_dataset.prefetch(2),
                                                validation_data=validation_dataset.prefetch(2),
                                                epochs=300,
-                                               initial_epoch=continue_from[1] if continue_from else 0,
+                                               initial_epoch=checkpoint.save_counter.value() if continue_from else 0,
                                                # initial_epoch=checkpoint.save_counter.value() if continue_from else 0,
                                                callbacks=[  # tensorboard_callback,
                                                    image_callback,
@@ -132,7 +132,5 @@ with summary_writer.as_default() as summary:
                                                    metrics_callback,
                                                    # histogram_callback,
                                                ])
-    predict_datapoint(validation_log_datapoint, training_log_datapoint, style_transfer_training_model.training,
-                      callbacks=[histogram_callback])
 
 log.info("Finished successfully")

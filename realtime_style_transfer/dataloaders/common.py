@@ -135,8 +135,10 @@ def pair_up_content_and_style_datasets(content_dataset, style_dataset, shapes, *
     def _pair_up_dataset():
         for i, (content, style) in enumerate(zip(content_dataset, style_dataset)):
             datapoint = {'content': content[0] if with_ground_truth else content,
-                         'style_weights': tf.zeros(shapes['style_weights']),
                          'style': style}
+            if 'style_weights' in shapes:
+                datapoint['style_weights'] = tf.zeros(shapes['style_weights'])
+
             if with_ground_truth:
                 ground_truth = {
                     'content': content[1],
@@ -148,10 +150,11 @@ def pair_up_content_and_style_datasets(content_dataset, style_dataset, shapes, *
 
     output_signature = {
         'content': tf.TensorSpec(shape=shapes['content'], dtype=tf.dtypes.float32, name="content_data"),
-        'style_weights': tf.TensorSpec(shape=shapes['style_weights'], dtype=tf.dtypes.float32,
-                                       name="style_weights_data"),
         'style': tf.TensorSpec(shape=shapes['style'], dtype=tf.dtypes.float32, name="style_data")
     }
+    if 'style_weights' in shapes:
+        output_signature['style_weights'] = tf.TensorSpec(shape=shapes['style_weights'], dtype=tf.dtypes.float32,
+                                       name="style_weights_data"),
 
     if with_ground_truth:
         ground_truth_data = {

@@ -215,10 +215,10 @@ def create_style_transfer_model(input_shape, output_shape, bottleneck_res_y, bot
 
     num_contract_blocks = math.ceil(math.log2(input_shape[0]) - math.log2(bottleneck_res_y))
     contract_filter_sizes = [
-        (64, 3, 2),
-        (128, 3, 2),
-        (128, 3, 2),
-        (128, 3, 2),
+        (16, 3, 2),
+        (32, 3, 2),
+        (32, 3, 2),
+        (32, 3, 2),
     ]
     contract_blocks = [contract(input_shape, 32, 9, 1, name="start")]
     contract_blocks += [
@@ -244,10 +244,10 @@ def create_style_transfer_model(input_shape, output_shape, bottleneck_res_y, bot
     ]
 
     expand_filter_sizes = [
-        (64, 3, 2),
         (32, 3, 2),
         (16, 3, 2),
         (8, 3, 2),
+        (4, 3, 2),
         (3, 3, 2),
         (3, 3, 2),
         (3, 3, 2),

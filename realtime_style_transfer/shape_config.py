@@ -26,14 +26,16 @@ class ShapeConfig:
         self.output_shape = output_dimensions + (3,)
         image_shape = input_dimensions + (3,)
         self.image_shape = image_shape
-        self.sdr_input_shape = {'content': image_shape,
-                                'style_weights': output_dimensions + (num_styles - 1,),
-                                'style': (num_styles,) + self.output_shape}
-        self.hdr_input_shape = {'content': input_dimensions + (num_channels,),
-                                'style_weights': output_dimensions + (num_styles - 1,),
-                                'style': (num_styles,) + self.output_shape}
+        sdr_input_shape = {'content': image_shape,
+                           'style': (num_styles,) + self.output_shape}
+        hdr_input_shape = {'content': input_dimensions + (num_channels,),
+                           'style': (num_styles,) + self.output_shape}
 
-        self.input_shape = self.hdr_input_shape if hdr else self.sdr_input_shape
+        self.input_shape = hdr_input_shape if hdr else sdr_input_shape
+
+        if num_styles > 1:
+            self.input_shape['style_weights'] = output_dimensions + (num_styles - 1,),
+
         self.style_feature_extractor_type = stylePrediction.StyleFeatureExtractor.MOBILE_NET
         self.with_depth_loss = True
 

@@ -49,17 +49,19 @@ def make_style_transfer_training_model(style_predictor_factory_func: typing.Call
     )
     style_loss_func, loss_model = style_loss_func_factory_func()
 
-    y_pred_input = {
+    training_model = StyleTransferTrainingModel(style_loss_func, loss_model, inference_model.inference)
+
+    y_true_input = {
         'content': loss_model.input['ground_truth']['content'],
         'style': loss_model.input['ground_truth']['style'],
     }
-    training_model = StyleTransferTrainingModel(style_loss_func, loss_model, inference_model.inference)
+    loss_model_inputs = (inference_model.inference.input, y_true_input)
+    symbolic_losses = style_loss_func(inference_model.inference.output, y_true_input)
 
-    symbolic_losses = style_loss_func(inference_model.inference.outputs, y_pred_input)
 
     class StyleTransferModels:
         def __init__(self):
-            self.loss_model = tf.keras.Model((inference_model.inputs, y_pred_input), symbolic_losses)
+            self.loss_model = tf.keras.Model(loss_model_inputs, symbolic_losses)
             self.training = training_model
             self.inference = inference_model.inference
             self.transfer = inference_model.transfer

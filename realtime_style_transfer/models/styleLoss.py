@@ -291,11 +291,14 @@ def mean_l2_loss_on_batch(tensor):
 def make_style_loss_function(loss_feature_extractor_model: StyleLossModelBase, output_shape, num_styles,
                              with_depth_loss=True):
     loss_feature_extractor_model.trainable = False
-    inputs = {
+    root_inputs = {
         'prediction': tf.keras.Input(output_shape),
         'ground_truth': {'content': tf.keras.Input(output_shape),
                          'style': tf.keras.Input((num_styles,) + output_shape)}
     }
+
+    inputs = root_inputs
+
     # perform feature extraction on the input content image and diff it against the output features
     input_style, input_prediction, input_ground_truth = (inputs['ground_truth']['style'],
                                                          inputs['prediction'],
@@ -304,7 +307,7 @@ def make_style_loss_function(loss_feature_extractor_model: StyleLossModelBase, o
     assert len(input_style.shape) < 5 or input_style.shape[1] == 1, \
         f"Loss model does not support multiple styles. Found {input_style.shape[1]} in shape {input_style.shape}"
 
-    single_input_style = tf.squeeze(input_style, axis=1) if input_style.shape[1] == 1 else input_style
+    single_input_style = tf.squeeze(input_style, axis=1, name="squeeze_style") if input_style.shape[1] == 1 else input_style
 
     loss_data_content = loss_feature_extractor_model(input_ground_truth)
     loss_data_style = loss_feature_extractor_model(single_input_style)
@@ -350,7 +353,7 @@ def make_style_loss_function(loss_feature_extractor_model: StyleLossModelBase, o
     if with_depth_loss:
         output['depth_loss'] = depth_loss
 
-    model = tf.keras.Model(inputs, output, name="StyleLoss")
+    model = tf.keras.Model(root_inputs, output, name="StyleLoss")
     model.trainable = False
 
     def compute_loss(y_pred: tf.Tensor, y_true):
