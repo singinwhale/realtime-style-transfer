@@ -70,5 +70,6 @@ def create_style_prediction_model(input_shape, feature_extractor: StyleFeatureEx
         name="StyleNormPredictor")(x)
 
     x = tf.squeeze(x, axis=[1, 2], name="squeeze")
+    x = tf.cast(x, dtype=tf.float32)
 
     return tf.keras.Model(inputs=inputs, outputs=x, name=name)

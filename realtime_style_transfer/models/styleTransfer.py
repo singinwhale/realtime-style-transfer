@@ -277,10 +277,10 @@ def create_style_transfer_model(input_shape, output_shape, bottleneck_res_y, bot
     num_style_parameters = (sum(map(lambda block_w_params: block_w_params[1], residual_blocks)) +
                             sum(map(lambda block_w_params: block_w_params[1], expand_blocks)))
 
-    inputs = {'content': tf.keras.layers.Input(shape=input_shape),
-              'style_params': tf.keras.layers.Input(
-                  shape=(num_styles, num_style_parameters)
-              )}
+    inputs = {
+        'content': tf.keras.layers.Input(shape=input_shape, dtype=tf.float32),
+        'style_params': tf.keras.layers.Input(shape=(num_styles, num_style_parameters), dtype=tf.float32)
+    }
     content_input, style_params_input = (inputs['content'],
                                          inputs['style_params'])
 
@@ -311,19 +311,21 @@ def create_style_transfer_model(input_shape, output_shape, bottleneck_res_y, bot
     for residual_block_layer, num_style_features in residual_blocks:
         x = {
             'content': x,
-            'style_weights': style_weights_mips[x.shape[-2]] if style_weights_mips is not None else None,
             'style_params': style_params_stack.get_params(num_style_features)
         }
+        if style_weights_mips is not None: x['style_weights'] = style_weights_mips[x['content'].shape[-2]]
         x = residual_block_layer(x)
 
     for expand_block, num_style_features, upscale_factor in expand_blocks:
         x = {
             'content': x,
-            'style_weights': style_weights_mips[
-                x.shape[-2] * upscale_factor] if style_weights_mips is not None else None,
             'style_params': style_params_stack.get_params(num_style_features)
         }
+        if style_weights_mips is not None: x['style_weights'] = style_weights_mips[
+            x['content'].shape[-2] * upscale_factor]
         x = expand_block(x)
+
+    x = tf.cast(x, dtype=tf.float32)
 
     model = tf.keras.Model(inputs=inputs, outputs=x, name=name)
     return model, num_style_parameters
