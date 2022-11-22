@@ -188,7 +188,7 @@ def _get_dataset(shapes, batch_size, content_image_directory, **kwargs) -> (tf.d
 
     if 'cache_dir' in kwargs:
         cache_dir = kwargs['cache_dir']
-        name_suffix = f"{shapes['content'][0]}_{shapes['content'][1]}"
+        name_suffix = "_".join(map(str, shapes['content']))
         training_dataset = training_dataset.cache(filename=str(cache_dir / f"wikiart_training_dataset_{name_suffix}"))
         validation_dataset = validation_dataset.cache(filename=str(cache_dir / f"wikiart_validation_dataset_{name_suffix}"))
 
