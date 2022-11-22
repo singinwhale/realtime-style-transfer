@@ -26,13 +26,13 @@ class PermutationFeatureImportanceData():
     baseline_losses: dict
     num_samples: int
 
-    def __init__(self, num_samples):
+    def __init__(self):
         self.baseline_losses = {loss_name: 0.0 for loss_name in
                                       ("loss", "style_loss", "feature_loss", "total_variation_loss", "depth_loss")}
         self.channel_contributions = {loss_name: {n: 0.0 for n, c in config.channels}
                                       for loss_name in self.baseline_losses.keys()}
 
-        self.num_samples = num_samples
+        self.num_samples = 0
 
 
 log = logging.getLogger()
@@ -104,7 +104,7 @@ else:
     log.info("Loading full dataset...")
     preloaded_validation_dataset = list(progressify(validation_dataset, total=validation_dataset.num_samples))
 
-    permutation_importance_data = PermutationFeatureImportanceData(num_samples=len(preloaded_validation_dataset))
+    permutation_importance_data = PermutationFeatureImportanceData()
 
     for i, sample in enumerate(progressify(preloaded_validation_dataset, position=0, desc="Sample")):
         matched_samples = list(preloaded_validation_dataset)
@@ -132,10 +132,12 @@ else:
                                                                                         - baseline_losses[loss]
                 component_lower_bound = component_upper_bound
 
-    permutation_importance_data_cache_file = permutation_importance_data_cache_file_path.open(mode='wb')
-    pickle.dump(permutation_importance_data, permutation_importance_data_cache_file)
+        permutation_importance_data.num_samples = i * (len(preloaded_validation_dataset) - 1)
 
-num_samples_and_permutations = permutation_importance_data.num_samples * (permutation_importance_data.num_samples - 1)
+        permutation_importance_data_cache_file = permutation_importance_data_cache_file_path.open(mode='wb')
+        pickle.dump(permutation_importance_data, permutation_importance_data_cache_file)
+
+num_samples_and_permutations = permutation_importance_data.num_samples
 for loss, channels in permutation_importance_data.channel_contributions.items():
     for channel, channel_value in channels.items():
         permutation_importance_data.channel_contributions[loss][channel] = (
