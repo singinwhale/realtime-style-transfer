@@ -24,7 +24,8 @@ outpath: Path = args.outpath
 
 log = logging.getLogger()
 
-tf.config.set_visible_devices([], 'GPU')
+# tf.config.set_visible_devices([], 'GPU')
+# tf.keras.mixed_precision.set_global_policy('mixed_float16')
 
 from realtime_style_transfer.models import styleTransfer, stylePrediction, styleTransferInferenceModel
 
@@ -46,10 +47,10 @@ style_transfer_training_model = styleTransferTrainingModel.make_style_transfer_t
         config.num_styles),
 )
 
-element = {
-    'content': tf.zeros((1,) + config.input_shape['content']),
-    'style': tf.zeros((1,) + config.input_shape['style']),
-    'style_weights': tf.zeros((1,) + config.input_shape['style_weights']),
+element = {input_name: (tf.zeros((1,) + input_shape)) for input_name, input_shape in config.input_shape.items()}
+ground_truth_element = {
+    'content': tf.zeros((1,) + config.output_shape),
+    'style': tf.zeros((1, config.num_styles) + config.output_shape)
 }
 
 log.info(f"Running inference to build model...")
@@ -61,6 +62,9 @@ load_status = checkpoint.restore(str(checkpoint_path))
 # load_status = style_transfer_training_model.inference.load_weights(filepath=str(checkpoint_path))
 load_status.assert_nontrivial_match()
 
+style_transfer_training_model.training(element)
+style_transfer_training_model.loss_model((element, ground_truth_element))
+
 predictor_path = outpath.with_suffix(".predictor.tf")
 transfer_path = outpath.with_suffix(".transfer.tf")
 
@@ -71,6 +75,12 @@ if with_tensorflow:
     predictor_path = outpath.with_suffix(".predictor.tf")
     style_transfer_training_model.style_predictor.save(filepath=str(predictor_path), include_optimizer=False,
                                                        save_format='tf')
+    style_transfer_training_model.loss_model.save(filepath=str(outpath.with_suffix('.loss.tf')),
+                                                  include_optimizer=False,
+                                                  save_format='tf')
+    style_transfer_training_model.training.save(filepath=str(outpath.with_suffix('.training.tf')),
+                                                  include_optimizer=True,
+                                                  save_format='tf')
 
 if with_onnx:
     log.info("Saving style predictor model as ONNX...")
@@ -78,11 +88,13 @@ if with_onnx:
                                [tf.TensorSpec(style_transfer_training_model.style_predictor.input_shape, name='style')],
                                output_path=predictor_path.with_suffix('.onnx'))
 
-    input_to_spec = {input_tensor.name: tf.TensorSpec(input_tensor.shape, name=name) for name,input_tensor in style_transfer_training_model.transfer.input.items()}
+    input_to_spec = {input_tensor.name: tf.TensorSpec(input_tensor.shape, name=name) for name, input_tensor in
+                     style_transfer_training_model.transfer.input.items()}
 
     log.info("Saving transfer model as ONNX...")
     tf2onnx.convert.from_keras(style_transfer_training_model.transfer,
-                               [input_to_spec[input_name] for input_name in style_transfer_training_model.transfer.input_names],
+                               [input_to_spec[input_name] for input_name in
+                                style_transfer_training_model.transfer.input_names],
                                output_path=transfer_path.with_suffix('.onnx'))
 log.info("Saving checkpoint...")
 checkpoint_outdir = outpath.with_suffix(".checkpoint")
