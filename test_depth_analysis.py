@@ -28,6 +28,7 @@ model = tf.keras.Model(input, output)
 
 
 def normalize_depth(d):
+    return d*0.01
     minimum = tf.reduce_min(d)
     maximum = tfp.stats.percentile(d, 98)
     d = tf.where(d < maximum, d, tf.zeros_like(d))
@@ -41,15 +42,15 @@ def normalize_depth(d):
 channels = next(iter(images))
 image = channels[..., 0:3]
 depth_map = model(image)
-fig, (plt1, plt2) = plt.subplots(1, 2, sharey=True, sharex=True)
+fig, (plt1, plt2) = plt.subplots(1, 2, sharey=True, sharex=True, figsize=(15,6))
 depth_map_image = normalize_depth(np.squeeze(depth_map.numpy()))
 plt1.imshow(depth_map_image)
-ground_truth_depth = channels[..., 3]
+ground_truth_depth = 1.0 / (channels[..., 3])
 
 # ground_truth_depth = tf.where(ground_truth_depth > 0, ground_truth_depth, tf.ones_like(ground_truth_depth))
 
 ground_truth_depth_resized = np.squeeze(resizing_layer(tf.expand_dims(ground_truth_depth, -1)))
-ground_truth_depth_normalized = np.squeeze(1 - normalize_depth(ground_truth_depth_resized))
+ground_truth_depth_normalized = np.squeeze(ground_truth_depth_resized)
 plt2.imshow(ground_truth_depth_normalized)
 fig.colorbar(mappable=plt1.pcolor(depth_map_image), ax=plt1)
 fig.colorbar(mappable=plt2.pcolor(ground_truth_depth_normalized), ax=plt2)
