@@ -22,12 +22,13 @@ outpath = args.outpath
 
 from realtime_style_transfer.shape_config import ShapeConfig
 
-tf.keras.mixed_precision.set_global_policy('mixed_float16')
+# tf.keras.mixed_precision.set_global_policy('mixed_float16')
 
 config = ShapeConfig(hdr=True, num_styles=1)
 
-content_dataset = hdrScreenshots.get_unreal_hdr_screenshot_dataset(wikiart.content_hdr_image_dir / "training", config.channels,
-                                                                   config.hdr_input_shape['content'])
+content_dataset = hdrScreenshots.get_unreal_hdr_screenshot_dataset(
+    wikiart.content_hdr_image_dir / "training", config.channels,
+    config.hdr_input_shape['content'])
 template_datapoint = {
     'style': tf.expand_dims(
         common.image_dataset_from_filepaths(style_image_paths, config.image_shape).batch(1).get_single_element(), 0),
@@ -63,14 +64,16 @@ log.info("Building model.")
 style_transfer_training_model.training(element)
 
 log.info(f"Loading weights from {checkpoint_path}")
-style_transfer_training_model.training.load_weights(filepath=str(checkpoint_path))
+load_status = style_transfer_training_model.inference.load_weights(filepath=str(checkpoint_path))
+load_status.assert_existing_objects_matched()
 
 frames = list()
-content_progress = tqdm(enumerate(content_dataset.prefetch(2)), file=sys.stdout, total=content_dataset.num_samples, desc="Generating Frames")
+content_progress = tqdm(enumerate(content_dataset.prefetch(2)), file=sys.stdout, total=content_dataset.num_samples,
+                        desc="Generating Frames")
 for i, content_image in content_progress:
     element = dict(template_datapoint)
     element['content'] = tf.expand_dims(content_image, 0)
-    predicted_frame = style_transfer_training_model.training.predict(element, batch_size=1, verbose=0)
+    predicted_frame = style_transfer_training_model.inference.predict(element, batch_size=1, verbose=0)
 
     frames.append((np.squeeze(predicted_frame) * 255).astype(int))
 
