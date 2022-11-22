@@ -99,7 +99,11 @@ with summary_writer.as_default() as summary:
                                                                                 config.with_depth_loss),
     )
 
-    style_transfer_training_model.training.compile(run_eagerly=False)  # True for Debugging, False for performance
+    optimizer = tf.keras.optimizers.RMSprop()
+    style_transfer_training_model.training.compile(
+        run_eagerly=False,
+        optimizer=optimizer
+    )  # True for Debugging, False for performance
     style_transfer_training_model.training.build(input_shape={n: (None,) + s for n, s in config.input_shape.items()})
     if continue_from is not None:
         latest_epoch_checkpoint_path = tf.train.latest_checkpoint(log_root_dir / continue_from[0] / "checkpoints" / "checkpoints")
