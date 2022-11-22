@@ -235,7 +235,9 @@ class BatchifyLayer(tf.keras.layers.Layer):
     def call(self, inputs, *args, **kwargs):
         def batchify(t):
             t_exp = tf.expand_dims(t, 0)
-            return self.wrapped_layer(t_exp)
+            t_exp = tf.cast(t_exp, tf.float32)
+            result = self.wrapped_layer(t_exp)
+            return tf.cast(result, tf.float32)
 
         mapped = tf.map_fn(batchify, inputs, infer_shape=False,
                            fn_output_signature=tf.TensorSpec(
@@ -248,9 +250,11 @@ class BatchifyLayer(tf.keras.layers.Layer):
 def get_depth_loss_func(input_shape):
     import tensorflow_hub as hub
 
-    midas_model = BatchifyLayer(hub.KerasLayer("https://tfhub.dev/intel/midas/v2/2", tags=['serve'],
-                                               signature='serving_default',
-                                               input_shape=(3, 384, 384), output_shape=(384, 384)))
+    # tf.keras.mixed_precision.set_global_policy('float32')
+    midas_model_unbatched = hub.KerasLayer("https://tfhub.dev/intel/midas/v2/2", tags=['serve'], signature='serving_default',
+                           input_shape=(3, 384, 384), output_shape=(384, 384))
+    # tf.keras.mixed_precision.set_global_policy('mixed_float16')
+    midas_model = BatchifyLayer(midas_model_unbatched, dtype=tf.float32)
 
     resizing_layer = tf.keras.layers.Resizing(384, 384)
 
