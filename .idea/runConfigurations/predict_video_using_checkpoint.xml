@@ -18,7 +18,7 @@
       <option name="useCurrentConnection" value="false" />
     </EXTENSION>
     <option name="SCRIPT_NAME" value="$PROJECT_DIR$/predict_video_using_checkpoint.py" />
-    <option name="PARAMETERS" value="-C .\logs\2022-11-02-16-01-35.803457\checkpoints\latest_epoch_weights -s .\data\wikiart\debug_images\training\00138f34171c13455d5bd65ce4eab19634ff1df7.jpg -o .\temp\2022-11-02-16-01-35.803457-low-res-train-float16.mp4" />
+    <option name="PARAMETERS" value="-C .\logs\rst-920-120-128-17\checkpoints\weights\latest_epoch_weights -s .\data\wikiart\debug_images\training\00138f34171c13455d5bd65ce4eab19634ff1df7.jpg -o .\temp\rst-920-120-128-17-00138f34171c13455d5bd65ce4eab19634ff1df7.mp4 -p .\profiling\rst-920-120-128-17" />
     <option name="SHOW_COMMAND_LINE" value="false" />
     <option name="EMULATE_TERMINAL" value="true" />
     <option name="MODULE_MODE" value="false" />

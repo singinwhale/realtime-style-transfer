@@ -112,21 +112,22 @@ def expand(input_shape: typing.Tuple, num_styles, filters, size, strides, name, 
         num_styles
     )
     style_params = tf.keras.layers.Input(shape=style_params_shape, name="input_scale")
-    result = tf.keras.layers.Conv2DTranspose(
+    x = tf.keras.layers.Conv2DTranspose(
         filters=filters, kernel_size=size, strides=strides, padding='same',
         kernel_initializer=initializer,
+        # activation=activation,
         name=f"{name}_conv")(content_inputs)
 
     instance_norm_args = {
-        "content": result,
+        "content": x,
         "style_params": style_params,
     }
     if style_weights_input is not None:
         instance_norm_args["style_weights"] = style_weights_input
 
-    result = ConditionalInstanceNormalization(filters, num_styles, 0)(instance_norm_args)
+    x = ConditionalInstanceNormalization(filters, num_styles, 0)(instance_norm_args)
 
-    result = tf.keras.layers.Activation(activation)(result)
+    x = tf.keras.layers.Activation(activation)(x)
 
     inputs = {
         "content": content_inputs,
@@ -135,7 +136,7 @@ def expand(input_shape: typing.Tuple, num_styles, filters, size, strides, name, 
     if style_weights_input is not None:
         inputs["style_weights"] = style_weights_input
 
-    expand_block_model = tf.keras.Model(inputs, result, name=name)
+    expand_block_model = tf.keras.Model(inputs, x, name=name)
     upscale_factor = strides
     return expand_block_model, num_style_params, upscale_factor
 
@@ -199,9 +200,9 @@ def contract(input_shape, filters, size, strides, name) -> tf.keras.Sequential:
 
     x = tf.keras.layers.BatchNormalization()(x)
 
-    result = tf.keras.layers.ReLU()(x)
+    x = tf.keras.layers.ReLU()(x)
 
-    return tf.keras.Model(inputs, result, name=name)
+    return tf.keras.Model(inputs, x, name=name)
 
 
 def calc_next_conv_dims(initial, filters, mult) -> typing.Tuple:
