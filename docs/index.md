@@ -10,6 +10,14 @@ title: Home
 > yields 50 frames per second. Incorporating the G-buffer data improves the output image quality of the network
 > significantly.
 
+[Thesis](https://github.com/singinwhale/realtime-style-transfer/releases/download/1.0.0/realtime-style-transfer.pdf) | [Code1](https://github.com/singinwhale/realtime-style-transfer) | [Code2](https://github.com/singinwhale/realtime-style-transfer-unreal) | [Code3](https://github.com/singinwhale/UnrealEngine/tree/realtime-style-transfer)
+
+## Pretrained Models
+
+Pretrained models are available in the releases section:
+
+[Link](https://github.com/singinwhale/realtime-style-transfer/releases/tag/1.0.0)
+
 ## Code
 
 ### Network Training

@@ -31,7 +31,7 @@ import realtime_style_transfer.tracing as tracing
 log = logging.getLogger()
 
 continue_from = None
-continue_from = ("2022-11-14-11-37-49.531687", 41)
+# continue_from = ("2022-11-28-11-22-54.799908", 41)
 
 cache_root_dir = Path(__file__).parent / 'cache'
 cache_root_dir.mkdir(exist_ok=True)

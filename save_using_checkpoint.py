@@ -15,12 +15,14 @@ argparser.add_argument('--checkpoint_path', '-C', type=Path, required=True)
 argparser.add_argument('--tensorflow', '-t', action='store_true')
 argparser.add_argument('--onnx', '-x', action='store_true')
 argparser.add_argument('--outpath', '-o', type=Path, required=True)
+argparser.add_argument('--network_spec', '-n', type=str, required=False)
 
 args = argparser.parse_args()
 checkpoint_path: Path = args.checkpoint_path
 with_tensorflow: bool = args.tensorflow
 with_onnx: bool = args.onnx
 outpath: Path = args.outpath
+network_spec: str = args.network_spec
 
 log = logging.getLogger()
 
@@ -29,7 +31,10 @@ log = logging.getLogger()
 
 from realtime_style_transfer.models import styleTransfer, stylePrediction, styleTransferInferenceModel
 
-config = ShapeConfig(hdr=True, num_styles=1)
+if network_spec:
+    config = ShapeConfig.from_spec(network_spec, 1, True)
+else:
+    config = ShapeConfig(hdr=True, num_styles=1)
 
 style_loss_model = styleLoss.StyleLossModelMobileNet(config.output_shape)
 
