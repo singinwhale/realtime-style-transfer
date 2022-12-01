@@ -15,7 +15,9 @@ title: Home
 ### Network Training
 
 The source code for getting the dataset and training the different variants of the network
-can [be found here](https://github.com/singinwhale/realtime-style-transfer).
+can be found here:
+
+[Link](https://github.com/singinwhale/realtime-style-transfer).
 
 ### Unreal Project
 
@@ -23,11 +25,11 @@ can [be found here](https://github.com/singinwhale/realtime-style-transfer).
 #### Unreal Engine Modifications
 
 You need to be a member of the _Epic Games_ organization.
-To get access follow [these instructions](https://www.unrealengine.com/en-US/ue-on-github)
+To get access follow these instructions: [Link](https://www.unrealengine.com/en-US/ue-on-github)
 
-The engine modifications can be found in the
-[UnrealEngine fork on the realtime-style-transfer branch](https://github.com/singinwhale/UnrealEngine/tree/realtime-style-transfer)
-.
+The engine modifications can be found in the UnrealEngine fork on the realtime-style-transfer branch.
+
+[Link](https://github.com/singinwhale/UnrealEngine/tree/realtime-style-transfer)
 
 
 The LFS assets for the Lyra project are too big for my GitHub so only parts of it are available on GitHub.
@@ -35,13 +37,16 @@ The LFS assets for the Lyra project are too big for my GitHub so only parts of i
 #### Plugin
 
 The standalone style transfer **plugin** alone is
-on [my GitHub here](https://github.com/singinwhale/realtime-style-transfer-unreal)
+on my GitHub. 
+
+[Link](https://github.com/singinwhale/realtime-style-transfer-unreal)
 
 #### Full Lyra Project
 
-The game project is available
-on [my private GitTea instance](https://git.singinwhale.com/singinwhale/RealtimeStyleTransferRuntime).
+The game project is available on my private GitTea instance.
 You are still going to need the modified Unreal Engine to run this project. 
+
+[Link](https://git.singinwhale.com/singinwhale/RealtimeStyleTransferRuntime)
 
 ## Videos
 
