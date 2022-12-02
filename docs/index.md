@@ -12,6 +12,10 @@ title: Home
 
 [Thesis](https://github.com/singinwhale/realtime-style-transfer/releases/download/1.0.0/realtime-style-transfer.pdf) | [Code1](https://github.com/singinwhale/realtime-style-transfer) | [Code2](https://github.com/singinwhale/realtime-style-transfer-unreal) | [Code3](https://github.com/singinwhale/UnrealEngine/tree/realtime-style-transfer)
 
+<iframe width="480" height="240"
+src="https://www.youtube-nocookie.com/embed/Y437ejhyT_U" frameborder="0" allow="autoplay; encrypted-media"
+allowfullscreen></iframe>
+
 ## Pretrained Models
 
 Pretrained models are available in the releases section:
@@ -57,6 +61,12 @@ You are still going to need the modified Unreal Engine to run this project.
 [Link](https://git.singinwhale.com/singinwhale/RealtimeStyleTransferRuntime)
 
 ## Videos
+
+### rst-960-120-32-3 In Engine
+
+<iframe width="480" height="240"
+src="https://www.youtube-nocookie.com/embed/Y437ejhyT_U" frameborder="0" allow="autoplay; encrypted-media"
+allowfullscreen></iframe>
 
 ### rst-960-120-128-18
 
