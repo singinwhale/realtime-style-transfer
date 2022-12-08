@@ -79,8 +79,7 @@ The saved models can be downloaded from the releases section.
 python predict_using_saved_models.py 
 "./path/to/style.png"
 "./path/to/content.png"
-"./path/to/model.transfer.tf"
-"./path/to/model.prediction.tf"
+"./path/to/model.training.tf"
 --output-path "./path/to/stylized_image.png" 
 ```
 
