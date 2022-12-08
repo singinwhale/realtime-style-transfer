@@ -39,31 +39,41 @@ This system does not expose all parameters as arguments to the scrips.
 You often need to adjust scripts in order to get the model that you want.
 Most often these changes are limited to `realtime_style_transfer/shape_config.py` however.
 
-Here you must update the first couple of arguments to match your input data. 
+Here you must update the first couple of arguments to match your input data.
 The parameters shown here correspond to rst-960-120-32-17.
+
 ```python
-    def __init__(self, num_styles=1, hdr=True):
-        self.bottleneck_res_y = 120
-        self.bottleneck_num_filters = 32
-        resolution_divider = 2
-        self.num_styles = num_styles
-        self.channels = [
-            ("FinalImage", 3),
-            ("BaseColor", 3),
-            #("ShadowMask", 1),
-            ("AmbientOcclusion", 1),
-            ("Metallic", 1),
-            ("Specular", 1),
-            ("Roughness", 1),
-            ("ViewNormal", 3),
-            ("SceneDepth", 1),
-            ("LightingModel", 3),
-        ]
+
+class ShapeConfig:
+    def __init__(self, num_styles=1, hdr=True,
+                 bottleneck_res_y=120,
+                 bottleneck_num_filters=128,
+                 resolution_divider=2,
+                 num_channels=17):
 ```
 
-### Training
+### Dataset
 
-In General
+The full dataset is too big to share publicly on the internet. A small subset of the dataset can be found in the
+releases page. Unzip `example-data.zip` to the repository root so that the folder structure is as follows:
+```
+realtime-style-transfer
+├───data
+│   ├───screenshots
+│   │   └───hdr_images
+│   │       ├───training
+│   │       └───validation
+│   └───wikiart
+│       └───images
+│...
+```
+The wikiart dataset will be downloaded completely on first load but screenshots will have to be provided by you.
+You can collect screenshots by using the modified unreal engine available [here](https://github.com/singinwhale/UnrealEngine/tree/realtime-style-transfer)
+and the Lyra-Project available [here](https://git.singinwhale.com/singinwhale/RealtimeStyleTransferRuntime) and [here](https://github.com/singinwhale/realtime-style-transfer-unreal)
+
+## Training and Inference
+
+### Training
 
 ```shell
 python train_network.py
