@@ -45,15 +45,18 @@ def get_unreal_hdr_screenshot_dataset_from_filepaths(screenshot_png_paths, expec
 
     def load_hdr_screenshots_as_tensor():
         for screenshot_png in screenshot_png_paths:
-            channels, screenshot_path = load_unreal_hdr_screenshot(screenshot_png, expected_channels)
-            preprocessed_image: tf.Tensor = common.preprocess_numpy_image(channels, shape)
-            if 'output_shape' in kwargs:
-                output_shape = kwargs['output_shape']
-                ground_truth_image = _load_image_from_file(screenshot_path, output_shape[-3:])
-                ground_truth_tensor = _image_to_tensor(ground_truth_image, output_shape)
-                yield preprocessed_image, ground_truth_tensor
-            else:
-                yield preprocessed_image
+            try:
+                channels, screenshot_path = load_unreal_hdr_screenshot(screenshot_png, expected_channels)
+                preprocessed_image: tf.Tensor = common.preprocess_numpy_image(channels, shape)
+                if 'output_shape' in kwargs:
+                    output_shape = kwargs['output_shape']
+                    ground_truth_image = _load_image_from_file(screenshot_path, output_shape[-3:])
+                    ground_truth_tensor = _image_to_tensor(ground_truth_image, output_shape)
+                    yield preprocessed_image, ground_truth_tensor
+                else:
+                    yield preprocessed_image
+            except Exception as e:
+                log.warning(f"Skipping f{screenshot_png} due to an error: {e}")
 
     if 'output_shape' in kwargs:
         output_signature = (tf.TensorSpec(shape, tf.float32, name="content_data"),
